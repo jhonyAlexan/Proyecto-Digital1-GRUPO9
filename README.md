@@ -6,41 +6,21 @@ las actualizaciones comunes y devuelve aquí sus resultados validados.
 
 ## Estructura
 ```
-soc/                    build.py (SoC LiteX) y wb_peripheral.py (periférico <-> Wishbone)
-interfaces/
-  memory_map.yml        MAPA DE MEMORIA Y PERIFÉRICOS (fuente única de verdad)
-firmware/include/       memory_map.h (generado desde el YAML)
-docs/                   mapa_memoria.md (generado) y flujo_trabajo.md
-tools/                  memmap.py  gen_memmap.py  validate_core.py  sync_to_team.py  integrate_core.py
-cores/                  periféricos ya integrados (validados por los equipos)
-teams.yml               equipos, sus repos y los cores que posee cada uno
-.github/workflows/      ci.yml  sync-equipos.yml  integrar-equipo.yml
-template/               lo que reciben los repos de equipo:
-  .github/ISSUE_TEMPLATE/tarea.yml    formulario de tareas
-  .github/workflows/                  ci.yml, solicitar-integracion.yml
-  planificacion/                      GitHub Projects
-  diagramas/  diagrama_soc_digital2.svg
-  cores/blink/                        periférico de referencia
-    diagramas/  rtl/{Makefile, perip_blink.v, perip_blink_TB.v, perip_blink_TB.gtkw}  firmware/
-  firmware/main.c                     programas C de integración/prueba y juego
-  README.md
+template/
+    .github/ISSUE_TEMPLATE/     # Formulario de tareas para GitHub
+    planificacion/              # Configuración y uso de GitHub Projects
+    diagramas/                    # Diagramas generales de flujo y de bloques del sistema
+    cores/                        # Un directorio por periférico
+        <periferico>/
+            diagramas/            # Diagramas de flujo, bloques y estados del módulo
+            rtl/                  # Código Verilog y archivos de simulación
+                Makefile          # Construcción y prueba del módulo
+                module.v          # Componentes RTL del módulo
+                module_TB.v       # Testbench de cada componente
+                module_sim.gtkw   # Configuración de señales para GTKWave
+            firmware/             # Driver y rutinas C para controlar el módulo
+    firmware/                     # Juego y programas C de integración/prueba
+
+diagrama_soc_digital1_v3.svg
+README.md
 ```
-
-## Contrato de un periférico
-
-### Juego tipo Ritmo
-#### Mando tipo WII
-
-#### Tapete
-
-### Juego tipo Pelea
-
-
-## Comandos
-```bash
-pip install pyyaml && sudo apt install iverilog gtkwave
-python3 tools/gen_memmap.py                    # regenera memory_map.h y docs/mapa_memoria.md (--check en CI)
-python3 tools/validate_core.py --all           # estructura + interfaz + simulación de los cores
-python3 soc/build.py --board <placa> --build   # requiere LiteX
-```
-Flujo repo general ⇄ equipos y configuración de GitHub: [`docs/flujo_trabajo.md`](docs/flujo_trabajo.md).
