@@ -1,14 +1,14 @@
-# Pantalla
+# Periférico: Pantalla RGB Matrix
 
 ## UART
 ### 1. Diagrama de caja negra
 
-El periférico controla la matriz **Seengreat RGB Matrix P3.0-64 ×64** desde la FPGA de la Colorlight 5A-75B. El panel tiene 4096 píxeles con un LED rojo, uno verde y uno azul cada uno, se conecta por la interfaz paralela HUB75 y usa barrido 1/32: solo hay dos filas encendidas a la vez, la fila r y la fila r +32. El panel no guarda la imagen; la debe refrescar continuamente el controlador, cientos de veces por segundo.
+El periférico controla la matriz **Seengreat RGB Matrix P3.0-64 ×64** desde la FPGA de la Colorlight 5A-75B. El panel tiene 4096 píxeles con un LED rojo, uno verde y uno azul cada uno, se conecta por la interfaz paralela **HUB75** y usa barrido 1/32: solo hay dos filas encendidas a la vez, la fila r y la fila r +32. El panel no guarda la imagen; la debe refrescar continuamente el controlador, cientos de veces por segundo.
 Para el resto de la consola el controlador es un periférico del SoC: el procesador le escribe registros por el bus estándar del curso y el periférico genera solo las señales del panel.
 
 <img width="979" height="371" alt="image" src="https://github.com/user-attachments/assets/c42d1741-88e8-4f24-b0c8-e3228341c655" />
 
-Figura 1: Vista externa del controlador. A la izquierda, las entradas del bus del procesador; a la derecha, la salida de lectura hacia el bus y las líneas del conector HUB75 hacia el panel. Cada línea lleva una marca diagonal y un número que indica su ancho en bits.
+Figura 1: Vista externa del controlador. A la izquierda, las entradas del bus del procesador; a la derecha, la salida de lectura hacia el bus y las líneas del conector **HUB75** hacia el panel. Cada línea lleva una marca diagonal y un número que indica su ancho en bits.
 
 ####  Características iniciales
 
@@ -29,17 +29,23 @@ La vista de caja negra muestra únicamente las líneas externas. En la siguiente
 
 ### 2. Diagrama de bloques
 
-La propuesta usa el reloj común ``CLK`` de 50MHz. Como el generador de `baud_tick` de la UART, un generador de ticks produce pulsos de habilitación de un ciclo para el barrido; no es un reloj nuevo. La imagen vive en un framebuffer con un puerto de escritura para el procesador y uno de lectura para el barrido, de modo que ambos trabajan al mismo tiempo.
+La propuesta usa el reloj común ``clk`` de 50MHz. Como el generador de `baud_tick` de la UART, un generador de ticks produce pulsos de habilitación de un ciclo para el barrido; no es un reloj nuevo. La imagen vive en un framebuffer con un puerto de escritura para el procesador y uno de lectura para el barrido, de modo que ambos trabajan al mismo tiempo.
 
+#### Señales de interfaz
 
+| Señal | Descripción |
+|-------------|-------------|
+| `rst`                                        | Entrada común de reinicio de un bit, síncrona y activa en alto (contrato del curso). Lleva el barrido al reposo con el panel apagado; no borra la imagen. |
+| `clk`                                        | Reloj común de todos los bloques, 50MHz en el SoC. |
+| `d_in[31:0]`, `addr[4:0]`, `cs`, `rd`, `wr`  | Acceso del procesador. `cs` dura un ciclo por acceso; `addr` es el desplazamiento en bytes dentro de la ventana del periférico. |
+| `_out[31:0]`                                 | Dato leído, combinacional mientras `cs` y `rd` estén activos. |
+| `enable`                                     | Bit `EN` del registro `CONTROL`: 1 configura el panel y barre. |
+| `fb_we`, `fb_waddr[11:0]`, `fb_wdata[2:0]`   | Escritura de un píxel: dirección {_y[5:0]_,_x[5:0]_} y color {_R_,_G_,_B_}. Ocurre en el mismo flanco del acceso a `PIXEL_DATA`. |
+| `fb_raddr[10:0]`                             | Dirección de lectura fila[4:0],columna[5:0]}. |
+| `top_q[2:0]`, `bot_q[2:0]`   | Píxel de la fila r y de la fila r + 32 en esa columna, leídos al mismo tiempo. |
+| `tick`  | Habilitación de un ciclo de `clk` cada `CLK_DIV` ciclos. |
 
-´´´bash´´´´
-sadsa
-
-`git status`}}``
-
-
-
+<img width="458" height="881" alt="image" src="https://github.com/user-attachments/assets/856dbdab-4da9-46f3-9d86-1fef25cabd87" />
 
 
 ### 3. 
