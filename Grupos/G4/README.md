@@ -46,6 +46,7 @@ La propuesta usa el reloj común ``clk`` de 50MHz. Como el generador de `baud_ti
 | `tick`  | Habilitación de un ciclo de `clk` cada `CLK_DIV` ciclos. |
 
 <img width="458" height="881" alt="image" src="https://github.com/user-attachments/assets/856dbdab-4da9-46f3-9d86-1fef25cabd87" />
+
 Figura2: Diagrama de bloques con entradas a la izquierda, salidas a la derecha, `rst` por arriba y `clk` por debajo. El contorno punteado agrupa los bloques del periférico. Las señales con el mismo nombre representan una conexión común. Las señales del bus y del panel cruzan el contorno. `tick` (en rojo) es una habilitación, no un reloj. Cada línea lleva una marca diagonal y un número que indica su ancho en bits.
 
 ### 3. 
