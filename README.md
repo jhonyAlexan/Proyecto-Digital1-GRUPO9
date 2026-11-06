@@ -30,7 +30,7 @@ G1 -
 G2 -   
 G3 - Alexander Calderón Piedrahita, Jeimmy Pinto Aconcha y Kennet Cruz Machuca.  
 G4 -     
-G5 -   
+G5 - Andrés Alejandro González Vargas, James Velázquez Boyaca y Juan Esteban Castañeda
 G6 -   
 
 ##Designación de Tareas.  
