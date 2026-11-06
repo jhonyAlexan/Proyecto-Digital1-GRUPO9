@@ -1,43 +1,39 @@
-# Consola de videojuegos sobre FPGA — Repositorio general (Diseño Digital 1)
+# Entorno de trabajo – Grupo 5
 
-Contiene lo **compartido por el curso**: arquitectura, construcción base del SoC LiteX,
-interfaces, mapa de memoria e integración. Cada equipo trabaja en **su propio repositorio**: recibe de aquí
-las actualizaciones comunes y devuelve aquí sus resultados validados.
+**Integrantes:**
+- Andrés Alejandro González Vargas
+- Integrante 2
+- Integrante 3
 
-## Estructura
-```
-template/
-    .github/ISSUE_TEMPLATE/     # Formulario de tareas para GitHub
-    planificacion/              # Configuración y uso de GitHub Projects
-    diagramas/                    # Diagramas generales de flujo y de bloques del sistema
-    cores/                        # Un directorio por periférico
-        <periferico>/
-            diagramas/            # Diagramas de flujo, bloques y estados del módulo
-            rtl/                  # Código Verilog y archivos de simulación
-                Makefile          # Construcción y prueba del módulo
-                module.v          # Componentes RTL del módulo
-                module_TB.v       # Testbench de cada componente
-                module_sim.gtkw   # Configuración de señales para GTKWave
-            firmware/             # Driver y rutinas C para controlar el módulo
-    firmware/                     # Juego y programas C de integración/prueba
+Este repositorio corresponde al entorno de trabajo del **Grupo 5**, encargado del desarrollo de los módulos de **Sonido y Joystick** para el proyecto de Diseño Digital 1.
 
-diagrama_soc_digital1_v3.svg
-README.md
-```
+A diferencia del repositorio general del curso, este espacio está destinado a centralizar y documentar los aportes, avances, modificaciones y resultados desarrollados por los integrantes del grupo durante la ejecución del proyecto.
 
-##Grupos
-G1 - 
-G2 - 
-G3 - Alexander Calderón Piedrahita, Jeimmy Pinto Aconcha y Kennet Cruz Machuca.
-G4 - 
-G5 - 
-G6 - 
+## Objetivos
 
-##Designación de Tareas.
-G1 - Comunicación de FPGA. 
-G2 - Arquitectura Hardware.
-G3 - IMU BMI160 (Giro y aceleración).
-G4 - Pantalla. 
-G5 - Sonido y Joystick. 
-G6 - Arquitectura del Juego.
+Desarrollar los módulos de **Sonido y Joystick** de la consola de videojuegos sobre FPGA, contribuyendo a la interacción del usuario con el sistema y a la experiencia de juego.
 
+De manera específica, se busca:
+
+- **Módulo de sonido:** desarrollar un sistema capaz de generar las señales de audio necesarias para representar sonidos y efectos durante la ejecución del videojuego.
+- **Módulo de joystick:** implementar una interfaz que permita capturar e interpretar las acciones del usuario mediante los controles físicos, convirtiéndolas en entradas reconocibles para el sistema.
+- **Compatibilidad con el SoC:** garantizar que ambos módulos puedan integrarse y operar correctamente dentro de la arquitectura general de la consola.
+- **Funcionamiento conjunto:** conseguir que las entradas del joystick y las salidas de sonido respondan adecuadamente a los eventos y condiciones del videojuego, proporcionando una experiencia de juego funcional.
+
+## Metodología de trabajo
+
+- **Desarrollo:** realizar las implementaciones y modificaciones correspondientes a los módulos asignados al Grupo 5.
+- **Registro de aportes:** documentar los avances y contribuciones mediante commits descriptivos.
+- **Seguimiento:** mantener un historial de las modificaciones y resultados obtenidos durante el desarrollo.
+- **Validación:** revisar y verificar el funcionamiento de los desarrollos antes de compartirlos.
+- **Integración:** una vez revisados y validados, los aportes podrán incorporarse a la rama `main` del repositorio general del curso mediante un proceso de integración (*Pull Request* o *Merge*).
+
+## Registro de avances y aportes
+
+En esta sección se documentarán los principales avances, implementaciones, pruebas y contribuciones realizadas por el Grupo 5.
+
+| Fecha | Integrante(s) | Descripción del aporte | Estado |
+|---|---|---|---|
+| | | | En desarrollo |
+
+---
