@@ -29,7 +29,7 @@ README.md
 G1 -   
 G2 -   
 G3 - Alexander Calderón Piedrahita, Jeimmy Pinto Aconcha y Kennet Cruz Machuca.  
-G4 -     
+G4 - Carol Sánchez, Wiliam Niño, Juan Pablo Barrera, Juan Hernández
 G5 - Andrés Alejandro González Vargas, James Velázquez Boyaca y Juan Esteban Castañeda
 G6 -   
 
