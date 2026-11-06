@@ -25,7 +25,7 @@ diagrama_soc_digital1_v3.svg
 README.md
 ```
 
-##Grupos  
+## Grupos  
 G1 -   
 G2 -   
 G3 - Alexander Calderón Piedrahita, Jeimmy Pinto Aconcha y Kennet Cruz Machuca.  
@@ -33,11 +33,10 @@ G4 - Carol Sánchez, Wiliam Niño, Juan Pablo Barrera, Juan Hernández
 G5 - Andrés Alejandro González Vargas, James Velázquez Boyaca y Juan Esteban Castañeda
 G6 -   
 
-##Designación de Tareas.  
+## Designación de Tareas.  
 G1 - Comunicación de FPGA.   
 G2 - Arquitectura Hardware.  
 G3 - IMU BMI160 (Giro y aceleración).  
 G4 - Pantalla.   
 G5 - Sonido y Joystick.   
-G6 - Arquitectura del Juego.  
-
+G6 - Arquitectura del Juego.
