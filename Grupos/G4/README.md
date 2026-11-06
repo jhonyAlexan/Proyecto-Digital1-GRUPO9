@@ -1,5 +1,7 @@
 # Pantalla
 
+## Numerales 1, 2 y 3
+
 En el siguiente archivo se encuentra:
 
 1. Diagrama de caja negra
@@ -8,3 +10,4 @@ En el siguiente archivo se encuentra:
 
 [hub75_pasos_1_3.pdf](https://github.com/user-attachments/files/34453788/hub75_pasos_1_3.pdf)
 
+## 4
