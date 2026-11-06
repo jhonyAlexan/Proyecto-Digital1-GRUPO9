@@ -27,7 +27,18 @@ Los 64 píxeles de cada fila se envían secuencialmente, uno por pulso de CLK y 
 #### Aspectos pendientes
 La vista de caja negra muestra únicamente las líneas externas. En la siguiente sección se propone la división interna. Quedan pendientes la frecuencia de CLK, el tiempo de cada fila y la frecuencia de refresco, que se fijan en el análisis temporal. El reloj y el reset los impone el contrato del curso: clk del SoC (50MHz) y rst síncrono activo en alto. El orden de colores (variante normal o GBR del panel) y la orientación de la imagen se confirman con el panel real; no cambian el diseño, solo la asignación de pines.
 
-### 2.
+### 2. Diagrama de bloques
+
+La propuesta usa el reloj común clk de 50MHz. Como el generador de baud_tick de la UART, un generador de ticks produce pulsos de habilitación de un ciclo para el barrido; no es un reloj nuevo. La imagen vive en un framebuffer con un puerto de escritura para el procesador y uno de lectura para el barrido, de modo que ambos trabajan al mismo tiempo.
+
+
+
+
+
+
+
+
+
 
 ### 3. 
 
