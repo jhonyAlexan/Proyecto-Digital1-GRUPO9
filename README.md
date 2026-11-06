@@ -25,19 +25,19 @@ diagrama_soc_digital1_v3.svg
 README.md
 ```
 
-##Grupos
-G1 - 
-G2 - 
-G3 - Alexander Calderón Piedrahita, Jeimmy Pinto Aconcha y Kennet Cruz Machuca.
-G4 - 
-G5 - 
-G6 - 
+##Grupos  
+G1 -   
+G2 -   
+G3 - Alexander Calderón Piedrahita, Jeimmy Pinto Aconcha y Kennet Cruz Machuca.  
+G4 -     
+G5 -   
+G6 -   
 
-##Designación de Tareas.
-G1 - Comunicación de FPGA. 
-G2 - Arquitectura Hardware.
-G3 - IMU BMI160 (Giro y aceleración).
-G4 - Pantalla. 
-G5 - Sonido y Joystick. 
-G6 - Arquitectura del Juego.
+##Designación de Tareas.  
+G1 - Comunicación de FPGA.   
+G2 - Arquitectura Hardware.  
+G3 - IMU BMI160 (Giro y aceleración).  
+G4 - Pantalla.   
+G5 - Sonido y Joystick.   
+G6 - Arquitectura del Juego.  
 
