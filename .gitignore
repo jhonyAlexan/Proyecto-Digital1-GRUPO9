@@ -1,7 +1,0 @@
-build/
-*.vcd
-*.out
-*.o
-*.elf
-*.bin
-__pycache__/
