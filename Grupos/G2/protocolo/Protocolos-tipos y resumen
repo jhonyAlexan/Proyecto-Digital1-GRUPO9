@@ -1,0 +1,31 @@
+Protocolo	                                       Descripción breve
+------------------------------------------------------------------------------------------------------------------
+ISP (In-System Programming)	 Programa la memoria del chip sin sacarlo de la placa, normalmente usando SPI. 
+                             Es el término genérico (ej. AVR/Arduino con pines MOSI, MISO, SCK, RESET).
+------------------------------------------------------------------------------------------------------------------
+ICSP                            (In-Circuit Serial Programming)	Versión de Microchip (PIC) de ISP. Usa pines como PGC (reloj), PGD (datos) y MCLR/VPP.
+--------------------------------------------------------------------------------------------------------------------
+ICP (In-Circuit Programming)     Término general equivalente a ISP/ICSP, usado por algunos fabricantes (ej. STC, Nuvoton).
+--------------------------------------------------------------------------------------------------------------------------
+JTAG (IEEE 1149.1)	            Estándar de 4 o 5 hilos (TCK, TMS, TDI, TDO). Sirve para programar, depurar y probar la placa (boundary scan). 
+                                También se usa para configurar FPGAs.
+---------------------------------------------------------------------------------------------------------------------------
+SWD (Serial Wire Debug)	Alternativa de 2 hilos (SWDIO, SWCLK) a JTAG para microcontroladores ARM Cortex. Programa y depura.
+-----------------------------------------------------------------------------------------------------------------------------------------------
+UPDI / PDI / debugWIRE	Protocolos de Microchip/Atmel de 1 o 2 hilos para programar y depurar AVR modernos.
+-----------------------------------------------------------------------------------------------------------------------------------------------
+Bootloader (UART/USB DFU)	Un programa residente en el chip recibe el firmware por puerto serial o USB, sin programador externo.
+------------------------------------------------------------------------------------------------------------------------------------------------
+Programación paralela / alto voltaje	Método antiguo que usa muchos pines y a veces 12 V. Es más rápido y sirve para rescatar chips bloqueados.
+----------
+----------
+----------
+Protocolos de comunicación con memorias externas (leer/escribir/configurar)
+Protocolo	                                                Descripción breve
+-----------------------------------------------------------------------------------------------------------------------------------------------
+SPI	                                  Bus de 4 hilos, rápido y muy usado en memorias Flash (W25Qxx) y SD.
+QSPI / Octal SPI	                    SPI con 4 u 8 líneas de datos para mayor velocidad (Flash externas, XIP).
+I²C	                                  Bus de 2 hilos (SDA, SCL), común en EEPROM como la serie 24Cxx. Es lento pero simple.
+Microwire	                            Similar a SPI, de 3 a 4 hilos, usado en EEPROM como la serie 93Cxx.
+1-Wire	                              Un solo hilo de datos (Dallas/Maxim), usado en EEPROM pequeñas e identificadores.
+Bus paralelo	                        Líneas de dirección y datos separadas (SRAM, Flash NOR, EPROM). Es rápido pero ocupa muchos pines.
