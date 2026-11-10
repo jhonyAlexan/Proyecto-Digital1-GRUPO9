@@ -1,0 +1,14 @@
+toma de decisiones sobre el protocolo
+protocolo ISP
+La programación en sistema (ISP) permite grabar microcontroladores, arreglos de compuertas programables en campo (FPGA) y 
+otros chips reconfigurables directamente sobre la placa de circuito ya montada, lo que evita recurrir a estaciones de grabado externas y 
+disminuye la manipulación de componentes. Para habilitar esta capacidad, el equipo de prueba en circuito (ICT) debe contar con el hardware y 
+software adecuados para gestionar protocolos como JTAG (Grupo de Acción de Pruebas Conjuntas), SPI (Interfaz Periférica Serie) o UART (Receptor-Transmisor Asíncrono Universal). 
+Esto supone asegurar el contacto físico mediante agujas de prueba o pines de fijación, aplicar algoritmos de programación compatibles y desplegar vías de comunicación fiables 
+para el traspaso de datos y la configuración del dispositivo.
+
+Una integración exitosa depende en gran medida del trabajo conjunto entre el equipo de diseño de la PCB y el de ingeniería de pruebas. 
+Durante la fase de concepción del circuito, se debe planificar la ubicación exacta de los puntos de prueba (pads) y del acceso eléctrico para que 
+la máquina ICT interactúe sin inconvenientes con los dispositivos objetivo; sin este acuerdo previo, la ISP puede volverse inviable en la fase de producción.
+Por otra parte, resulta esencial incorporar mecanismos de validación que aseguren la integridad del proceso, tales como la medición de la estabilidad de la señal, el control del voltaje y revisiones posteriores como el cotejo de sumas de comprobación (checksum). 
+Cuando se ejecuta correctamente, la ISP integrada en el entorno ICT optimiza la manufactura al fusionar el grabado y el testeo en una sola etapa más ágil y consolidada.
