@@ -120,3 +120,11 @@ Dudas que deben resolverse con las guías o con el profesor. Se marcan al quedar
 - Nombres de carpetas y archivos sin espacios ni tildes: los Makefile y la terminal fallan con ellos.
 - Las señales se llaman igual en los diagramas, en el Verilog y en la documentación.
 - Ningún cambio se sube sin que otro integrante lo revise.
+
+## Registro de avances y aportes
+
+En esta sección se documentarán los principales avances, implementaciones, pruebas y contribuciones realizadas por el Grupo 5.
+
+| Fecha | Integrante(s) | Descripción del aporte | Estado |
+|---|---|---|---|
+| | | | En desarrollo |
