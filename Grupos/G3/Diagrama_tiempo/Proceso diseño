@@ -1,0 +1,37 @@
+Para el aceleròmetro:
+
+Registro    Contenido         Dirección
+─────────────────────────────────────
+ACC_X_LSB   accel X bajo      0x12
+ACC_X_MSB   accel X alto      0x13
+ACC_Y_LSB   accel Y bajo      0x14
+ACC_Y_MSB   accel Y alto      0x15
+ACC_Z_LSB   accel Z bajo      0x16
+ACC_Z_MSB   accel Z alto      0x17
+
+GYR_X_LSB   gyro X bajo       0x0C
+GYR_X_MSB   gyro X alto       0x0D
+GYR_Y_LSB   gyro Y bajo       0x0E
+GYR_Y_MSB   gyro Y alto       0x0F
+GYR_Z_LSB   gyro Z bajo       0x10
+GYR_Z_MSB   gyro Z alto       0x11
+
+1. Inicializar el BMI160
+
+Transacción INIT 1:  escribir 0x11 al registro 0x7E  → accel normal mode
+                     esperar 5ms (el sensor lo pide)
+
+Transacción INIT 2:  escribir 0x15 al registro 0x7E  → gyro normal mode
+                     esperar 80ms (el gyro tarda más en despertar)
+
+2. Tomar los datos guardados en los registros 
+
+Transacción 1:  dirección 0x8C (0x0C | 0x80 bit lectura)
+                recibe: GYR_X_LSB, GYR_X_MSB,
+                        GYR_Y_LSB, GYR_Y_MSB,
+                        GYR_Z_LSB, GYR_Z_MSB   → 6 bytes
+
+Transacción 2:  dirección 0x92 (0x12 | 0x80)
+                recibe: ACC_X_LSB, ACC_X_MSB,
+                        ACC_Y_LSB, ACC_Y_MSB,
+                        ACC_Z_LSB, ACC_Z_MSB   → 6 bytes
