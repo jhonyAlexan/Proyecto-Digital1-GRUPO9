@@ -39,7 +39,7 @@ Los dos son **periféricos mapeados en memoria**: el procesador solo lee y escri
 
 ## Interfaz común con el procesador
 
-Según el contrato del curso (ver `template/diagramas/` y el README del G4), todo periférico se conecta al bus con estas señales:
+Según el contrato del curso (ver `template/diagramas/`), todo periférico se conecta al bus con estas señales:
 
 | Señal | Descripción |
 |---|---|
@@ -53,12 +53,11 @@ Según el contrato del curso (ver `template/diagramas/` y el README del G4), tod
 
 ## Placas
 
-El destino final es la consola tipo Game Boy del profesor. Las otras placas son de prueba: lo que se diseña en ellas debe funcionar en la consola cambiando solo parámetros, pines y el módulo superior.
+El destino final es la consola tipo Game Boy del profesor. La Tang Nano 9K es la placa de prueba del equipo: lo que se diseña en ella debe funcionar en la consola cambiando solo parámetros, pines y el módulo superior.
 
 | Placa | Uso | FPGA | Reloj de la placa |
 |---|---|---|---|
 | Consola tipo Game Boy del profesor | Destino final | Por identificar | Por identificar |
-| Colorlight 5A-75B | Pruebas del G4 | Lattice ECP5 | 25 MHz |
 | Tang Nano 9K | Pruebas del G5 | Gowin GW1NR-9 | 27 MHz |
 
 Para que el diseño sea portable:
@@ -101,15 +100,15 @@ Dudas que deben resolverse con las guías o con el profesor. Se marcan al quedar
 **Sobre el SoC**
 - [ ] Modelo exacto de la consola tipo Game Boy del profesor: FPGA, herramienta de síntesis, pines disponibles y voltajes.
 - [ ] ¿La consola ya trae botones, cruceta, parlante o salida de audio? Si los trae, cambia el plan del joystick (ESP32) y del audio.
-- [ ] Frecuencia de `clk` del SoC en la consola (el G4 usa 50 MHz en sus pruebas); de ella depende el divisor de la UART del joystick.
-- [ ] ¿Qué equipo define la plataforma final y el reloj? Por la designación de tareas, debería ser el G2 (arquitectura hardware).
+- [ ] Frecuencia de `clk` del SoC en la consola; de ella depende el divisor de la UART del joystick.
+- [ ] ¿Quién define la plataforma final y el reloj del SoC?
 - [ ] Dirección base de cada periférico. `template/diagramas/` menciona `interfaces/memory_map.yml`, que aún no está en el repositorio.
 - [ ] Ancho de `addr` asignado a la ventana de cada periférico.
 
 **Sobre el joystick**
 - [ ] ¿El periférico tiene su propio receptor UART en Verilog, o se reutiliza la UART del SoC? La del SoC ya se usa como consola.
 - [ ] Voltaje del banco de pines que recibe la línea RX de la ESP32 (la ESP32 trabaja a 3,3 V).
-- [ ] Formato definitivo del paquete y frecuencia de envío, acordados con el G6 (arquitectura del juego).
+- [ ] Formato definitivo del paquete y frecuencia de envío, según lo que necesite el software del juego.
 
 **Sobre el audio**
 - [ ] Hardware de salida: parlante, amplificador y método de generación (PWM, DAC u otro).
