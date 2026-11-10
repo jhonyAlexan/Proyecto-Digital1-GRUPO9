@@ -12,3 +12,14 @@ Durante la fase de concepción del circuito, se debe planificar la ubicación ex
 la máquina ICT interactúe sin inconvenientes con los dispositivos objetivo; sin este acuerdo previo, la ISP puede volverse inviable en la fase de producción.
 Por otra parte, resulta esencial incorporar mecanismos de validación que aseguren la integridad del proceso, tales como la medición de la estabilidad de la señal, el control del voltaje y revisiones posteriores como el cotejo de sumas de comprobación (checksum). 
 Cuando se ejecuta correctamente, la ISP integrada en el entorno ICT optimiza la manufactura al fusionar el grabado y el testeo en una sola etapa más ágil y consolidada.
+
+
+
+PROGRAMACION DEL PROTOCOLO.
+
+Para la programación ISP, el dispositivo programador está conectado al microcontrolador usando la menor cantidad de cables posible.
+Es necesaria una interfaz de solamente 6 cables para conectar el chip al programador. Esta conexión se puede apreciar en la figura adjuntable o depnediendo del chip usado) 
+las configuraciones pueden cambiar con su fabricante)   
+La interfaz periférica serial consiste en tres cables: Reloj serial, Master In – Slave Out y Master Out – Slave in. 
+De esta manera programador proporciona el reloj para la comunicación entre dispositivos; cada pulso del reloj transmite un bit desde el programador al microcontrolador. 
+Simultáneamente se envía un bit del microcontrolador al programador
