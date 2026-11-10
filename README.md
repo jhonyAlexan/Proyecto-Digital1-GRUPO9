@@ -31,7 +31,7 @@ G2 - ramon santiago castro c, juan vasquez, sofia michelle
 G3 - Alexander Calderón Piedrahita, Jeimmy Pinto Aconcha y Kennet Cruz Machuca.  
 G4 - Carol Sánchez, William Niño, Juan Pablo Barrera, Juan Hernández.    
 G5 - Andrés Alejandro González Vargas, James Velázquez Boyaca y Juan Esteban Castañeda.    
-G6 -   
+G6 - Juan Esteban Salazar Cabra, Juan Diego Vega Ramírez, Andrés Camilo Bermúdez Molina.  
 
 ## Designación de Tareas.  
 G1 - Comunicación de FPGA.   
