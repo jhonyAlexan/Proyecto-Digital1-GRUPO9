@@ -1,0 +1,15 @@
+primeras investigaciones sobre tarjetas de memoria:
+para la practica el grupo 2 se nos ha asignado la tarea de las memorias 
+marco teorico:
+la tarjeta de memoria sera la encargada de almacenar el juego como tal en una memoria de tipo no volatil para asegurarse que el juego y sus configuraciones se mantengan
+la tarjeta de memoria extra que se trabajara sera flash volatil en primera estancia que almacenara algunos datos y elementos como puntaje y configuraciones que a priori no vemos necesarias almacenar permanentemente por recomendacion del profesor
+
+
+
+puntos a resolver:
+1) comunicacion con la fpga
+2) arquitectura de comunicacion
+3) traduccion de los datos 
+4) eleccion del tipo, marca y capacidad de memoria
+5) creacion de techbends y archivos verilog que controlen la memoria y su almacenamiento
+6) eleccion del protocolo para resolver.
