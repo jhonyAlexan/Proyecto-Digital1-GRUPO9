@@ -1,8 +1,4 @@
-# Subgrupo G2 — Arquitectura Hardware y Sistema de Memorias
-
-**Integrantes:** Juan Sebastián Vásquez, Santiago Castro, Michael  
-**Curso:** Electrónica Digital 1 — Grupo 9  
-
+# Arquitectura Hardware y Sistema de Memorias
 ---
 
 ## 1. Selección y Justificación de Tecnologías de Memoria (Entregable E)
