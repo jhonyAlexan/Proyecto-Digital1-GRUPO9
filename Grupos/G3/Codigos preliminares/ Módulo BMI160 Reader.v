@@ -2,6 +2,7 @@
 // Módulo:       BMI160_Reader
 // Descripción:  FSM que lee acelerómetro y giroscopio del BMI160 por SPI,
 //               y deja los datos crudos en registros MMIO para el FemtoRV.
+Codigo Realizado, con IA, extraer diagrama de flujo y revisar con el profesor
 ///////////////////////////////////////////////////////////////////////////////
 
 module BMI160_Reader
