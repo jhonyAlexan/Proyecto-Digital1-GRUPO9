@@ -25,7 +25,7 @@ README.md
 ```
 
 ## Grupos  
-G1 -   
+G1 - Juan Felipe Velásquez Jaramillo, Cesar Augusto Jaramillo, Valentina Giraldo
 G2 - ramon santiago castro c, juan vasquez, sofia michelle  
 G3 - Alexander Calderón Piedrahita, Jeimmy Pinto Aconcha y Kennet Cruz Machuca.  
 G4 - Carol Sánchez, William Niño, Juan Pablo Barrera, Juan Hernández.    
