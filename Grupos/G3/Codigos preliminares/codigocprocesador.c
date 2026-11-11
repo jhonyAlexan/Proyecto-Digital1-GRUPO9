@@ -1,3 +1,5 @@
+//Codigo Realizado, con IA, extraer diagrama de flujo y revisar con el profesor
+
 #include <stdint.h>
 
 // ── Registros MMIO del BMI160 ─────────────────────────────────────────────
