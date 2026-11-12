@@ -137,21 +137,29 @@ El siguiente diagrama detalla la temporización a nivel de ciclo de la transmisi
 
 #### Cálculos Temporales y Ancho de Banda ($f_{\text{clk}} = 27\text{ MHz}$, $N = 4$)
 
-* **Período del reloj maestro del sistema ($T_{\text{clk}}$):**
+- **Período del reloj maestro del sistema ($T_{\text{clk}}$):**
+
   $$T_{\text{clk}} = \frac{1}{27\text{ MHz}} \approx 37.04\text{ ns}$$
 
-* **Semiperíodo y frecuencia de operación del reloj SPI ($f_{\text{SCLK}}$):**
+- **Semiperíodo y frecuencia de operación del reloj SPI ($f_{\text{SCLK}}$):**
+
   $$T_{\text{half}} = 4 \cdot T_{\text{clk}} \approx 148.15\text{ ns}$$
+
   $$T_{\text{SCLK}} = 2 \cdot T_{\text{half}} = 8 \cdot T_{\text{clk}} \approx 296.30\text{ ns} \implies f_{\text{SCLK}} = \frac{27\text{ MHz}}{8} = 3.375\text{ MHz}$$
 
-* **Latencia del sincronizador `2-FF`:** El doble flip-flop introduce un retardo fijo de $2 \cdot T_{\text{clk}} \approx 74.07\text{ ns}$. Dado que cada semiperíodo dura $148.15\text{ ns}$, el dato `miso_sync` queda estable al menos $74\text{ ns}$ antes de cada flanco de captura.
+- **Latencia del sincronizador `2-FF`:** El doble flip-flop introduce un retardo fijo de $2 \cdot T_{\text{clk}} \approx 74.07\text{ ns}$. Dado que cada semiperíodo dura $148.15\text{ ns}$, el dato `miso_sync` queda estable al menos $74\text{ ns}$ antes de cada flanco de captura.
 
-* **Tiempos de transferencia hacia el juego:**
-  * **Tiempo por byte ($8\text{ bits}$):** $T_{\text{byte}} = 8 \cdot T_{\text{SCLK}} \approx 2.37\,\mu\text{s}$.
-  * **Lectura simple de $1\text{ byte}$ (`Cmd 0x03 + 24-bit Addr + 1-byte Data = 40 bits`):**
-    $$T_{\text{lectura\_1B}} = 40 \cdot T_{\text{SCLK}} + 2 \cdot T_{\text{half}} \approx 12.15\,\mu\text{s}$$
-  * **Carga en ráfaga de un *sprite* de $16 \times 16\text{ píxeles}$ ($256\text{ bytes}$ con `cs_hold = 1`):**
-    $$T_{\text{sprite } 16\times 16} = (4 + 256) \cdot T_{\text{byte}} \approx 616.3\,\mu\text{s} \quad (< 3.7\% \text{ del presupuesto de } 16.67\text{ ms a } 60\text{ Hz})$$
+- **Tiempos de transferencia hacia el juego:**
+  - **Tiempo por byte ($8\text{ bits}$):** $T_{\text{byte}} = 8 \cdot T_{\text{SCLK}} \approx 2.37~\mu\text{s}$.
+  - **Lectura simple de $1\text{ byte}$ (`Cmd 0x03 + 24-bit Addr + 1-byte Data = 40 bits`):**
+
+    $$T_{\text{lectura 1B}} = 40 \cdot T_{\text{SCLK}} + 2 \cdot T_{\text{half}} \approx 12.15~\mu\text{s}$$
+
+  - **Carga en ráfaga de un *sprite* de $16 \times 16\text{ píxeles}$ ($256\text{ bytes}$ con `cs_hold = 1`):**
+
+    $$T_{\text{sprite } 16\times 16} = (4 + 256) \cdot T_{\text{byte}} \approx 616.3~\mu\text{s}$$
+
+    *(Equivale a menos del $3.7\%$ del presupuesto de cuadro de $16.67\text{ ms}$ a $60\text{ Hz}$).*
 
 ---
 
