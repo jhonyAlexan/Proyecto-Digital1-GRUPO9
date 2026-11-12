@@ -253,15 +253,15 @@ endmodule
 
 ---
 
-## 5. Protocolos Estudiados y Respuestas a las Preguntas Guía
+## 5. Protocolos
 
-### 5.1 Lista de Protocolos Técnicos del Subgrupo G2
+### 5.1 Lista de Protocolos Técnicos 
 
 1. **SPI Maestro Modo 0 ($\text{CPOL} = 0$, $\text{CPHA} = 0$):** Temporización de muestreo/desplazamiento, juego de instrucciones estándar JEDEC para memorias Flash NOR (`0x03` Read Data, `0x06` Write Enable, `0x02` Page Program, `0x20` Sector Erase $4\text{ KB}$, `0x05` Read Status Register) y modo ráfaga continuo con `CS#` retenido.
 2. **Bus Periférico Síncrono MMIO:** Decodificación de direcciones de $32\text{ bits}$, generación de pulsos de disparo de un ciclo (`W1P`) y sincronización por consulta de estado (`polling` de `busy`/`done`).
 3. **Inferencia de Memoria BSRAM Dual-Port (`SDPB`):** Reglas de descripción en Verilog síncrono para síntesis abierta en Yosys sobre arquitectura Gowin GW1N.
 
-### 5.2 Preguntas Guía Aplicadas al Sistema de Memorias
+### 5.2 Preguntas
 
 * **¿Qué pasa al encender y cómo se cargan los activos del juego?** Tras el reinicio síncrono (`rst`), el FemtoRV32 arranca ejecutando el gestor principal desde `BRAM_PROG_DATA` (`0x0000_0000`), inicializa los registros de video (`hub75_csr`) y consulta los *sprites* o tablas almacenados en sectores fijos de la Flash SPI `W25Q64JV` mediante el controlador MMIO (`0x1000_0100`).
 * **¿Cómo persisten los *High-Scores* sin sistema de archivos?** Se reserva un sector dedicado de $4\text{ KB}$ en la parte alta de la Flash `W25Q64JV` (por ejemplo, dirección física `0x7F_0000`). Cuando se supera un récord, el firmware envía la secuencia `0x06` (*Write Enable*) $\rightarrow$ `0x20` (*Sector Erase*) $\rightarrow$ `0x06` $\rightarrow$ `0x02` (*Page Program*) escribiendo la estructura binaria de puntajes directamente en memoria no volátil.
