@@ -141,6 +141,49 @@ Figura 5: Detalle de tres columnas con `CLK_DIV = 2`. La columna avanza cuando s
 
 Estas reglas se formalizan en el diagrama de flujo, el ASMD y la máquina de estados de los pasos siguientes.
 
+
+### 7. ASMD: del flujo a las transferencias por ciclo
+
+El ASMD organiza el barrido en bloques asociados a los estados y fija qué se carga en el próximo flanco de subida de `clk`. Los estados que envían columnas (INIT1, INIT2 y SHIFT) tienen el mismo bloque, que se llama *S*, y solo cambian tres parámetros:
+
+| Estado | dato(`col`) en las 6 líneas | zona(`col`) = `LAT` al presentar | Al terminar pasa a |
+|---|---|---|---|
+| INIT1 | patrón 1: `16'hFFFE[col mod 16]` replicado | `col >= 53` (11 pulsos) | INIT2 |
+| INIT2 | patrón 2: `16'h0200[col mod 16]` replicado | `col >= 52` (12 pulsos) | SHIFT |
+| SHIFT | {framebuffer(r, col), framebuffer(r+32, col)} | 0 | LATCH |
+
+#### Reglas comunes a todos los bloques
+
+Cada recorrido desde una caja de estado hasta un conector se evalúa durante un ciclo; las transferencias del recorrido se ejecutan en el flanco siguiente, junto con el cambio de estado. Rombos, cajas y conectores no añaden ciclos.
+
+- **Valores por defecto:** todos los registros conservan su valor (`col`, `r`, `cnt`, `RGB`, `ROW`, `frame`, `CLK`, `LAT`, `OE`). A diferencia de `tx_done` en la UART, aquí ninguna salida vuelve a cero sola.
+- **Reset prioritario (síncrono, activo alto):** IDLE, `col = r = cnt = 0`, `RGB = 0`, `ROW = 0`, `CLK = 1`, `LAT = 0`, `OE = 1`, `frame = 0`. No borra el framebuffer.
+- **Al entrar en S:** `CLK = 1` y `col = 0`, así el primer tick siempre presenta un dato. **Al entrar en DISPLAY:** `LAT = 1` y `cnt = 0`.
+
+#### Tabla de transferencias por flanco
+
+Q es el estado actual y Q⁺ el próximo. Las condiciones usan los valores anteriores al flanco. `rst = 1` tiene prioridad; las demás filas suponen `rst = 0`. Los registros no mencionados se mantienen.
+
+| ID | Estado y condición | Q⁺ | Datos en el flanco | Control en el flanco |
+|---|---|---|---|---|
+| R | Cualquiera, `rst = 1` | IDLE | `col, r, cnt, RGB, ROW, frame ← 0` | `CLK ← 1`, `LAT ← 0`, `OE ← 1` |
+| H1 | IDLE, `tick = 0` o `EN = 0` | IDLE | Mantener | Mantener (`OE = 1`) |
+| H2 | Otro estado, `tick = 0` | Q | Mantener | Mantener |
+| T1 | IDLE, `tick ∧ EN` | INIT1 | `col ← 0` | — |
+| T2 | S, `tick ∧ CLK = 1` | S | `RGB ← dato_S(col)` | `LAT ← zona_S(col)`, `CLK ← 0` |
+| T3 | S, `tick ∧ CLK = 0 ∧ col < 63` | S | `col ← col + 1` | `CLK ← 1` |
+| T4 | S, `tick ∧ CLK = 0 ∧ col = 63` | S siguiente | `col ← 0` | `CLK ← 1` |
+| T5 | LATCH, `tick` | DISPLAY | `ROW ← r`, `cnt ← 0` | `LAT ← 1` |
+| T6 | DISPLAY, `tick ∧ cnt < DT−1` | DISPLAY | `cnt ← cnt + 1` | `LAT ← 0`, `OE ← ¬(cnt < BRIGHT)` |
+| T7 | DISPLAY, `tick ∧ cnt = DT−1 ∧ EN` | SHIFT | `cnt ← 0`, `r ← r + 1`, `frame ← frame + 1` si `r = 31` | `LAT ← 0`, `OE ← 1` |
+| T8 | DISPLAY, `tick ∧ cnt = DT−1 ∧ ¬EN` | IDLE | Igual que T7 | Igual que T7 |
+
+Observaciones:
+- En T2, el dato del framebuffer es la salida registrada de la memoria para `{r, col}`. Llega un ciclo después de cambiar `col`; con `CLK_DIV >= 2` ya está listo cuando llega el tick de T2.
+- En T4 al salir de INIT1 o INIT2, `LAT` sigue en 1 y baja en el primer T2 del estado siguiente (la columna 0 está fuera de la zona). Así el driver cuenta 11 o 12 pulsos.
+- En T6, si `BRIGHT >= DT`, el panel queda encendido `DT − 1` ticks: el último tick (T7 o T8) siempre lo apaga.
+- Si `EN` baja y vuelve a subir antes del último tick de una fila, se sigue barriendo sin reconfigurar el panel. La configuración solo se repite al salir de IDLE.
+
 ---
 
 ### Referencias
