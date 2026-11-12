@@ -2,7 +2,7 @@
 
 ---
 
-## 1. Delimitación y Selección de Tecnologías de Memoria (Entregable E)
+## 1. Delimitación y Selección de Tecnologías de Memoria 
 
 De acuerdo con las restricciones de la plataforma (**Sipeed Tang Nano 9K** con FPGA **Gowin GW1NR-9**, compatible con flujo abierto **Yosys + nextpnr** y núcleo procesador **FemtoRV32 RISC-V** de arquitectura Von Neumann), la memoria interna **BSRAM** constituye un recurso escaso ($58.5\text{ KB}$ totales distribuidos en $26$ bloques de $18\text{ Kbit}$) que debe compartirse entre el firmware del procesador y el búfer de video.
 
@@ -27,7 +27,7 @@ El reparto físico de los $26$ bloques BSRAM ($58.5\text{ KB}$) del chip Gowin G
 
 ---
 
-## 2. Arquitectura del Sistema y Mapa de Memoria MMIO (Entregable D)
+## 2. Arquitectura del Sistema y Mapa de Memoria MMIO 
 
 ### 2.1 Acuerdos de Integración entre Subgrupos
 
@@ -50,7 +50,7 @@ Para garantizar la coherencia estructural de toda la consola en el repositorio `
 | `0x1000_0300` – `0x1000_0304` | $8\text{ B}$ | **G5** | `AUDIO_PWM` | Control de frecuencia y ciclo útil del generador de efectos sonoros por PWM. |
 | `0x2000_0000` – `0x2000_3FFF` | $16\text{ KB}$ (espacio) / $1.5\text{ KB}$ (físico) | **G2 / G4** | `FRAMEBUFFER_BRAM` | Escritura lineal de $4,096$ píxeles ($1\text{ palabra/píxel}$, `d_in[2:0] = {R,G,B}`) repartidos en dos bancos de $2048 \times 3\text{ bits}$. |
 
-### 2.3 Flujo Completo del Envío de Datos al Juego (Entregables B.2 y C)
+### 2.3 Flujo Completo del Envío de Datos al Juego 
 
 El siguiente diagrama ilustra la interacción comportamental y estructural entre las tareas en Hardware (HDL) y Software (C sobre FemtoRV32), desde la lectura de activos en la Flash SPI hasta el despliegue óptico en la matriz LED HUB75:
 
@@ -69,7 +69,7 @@ El siguiente diagrama ilustra la interacción comportamental y estructural entre
 
 Siguiendo el flujo de diseño estructural de la guía del curso (`uart.pdf`), se presenta el diseño completo en hardware del **Controlador Maestro SPI Modo 0** (`spi_flash_controller.v`), separado estrictamente en **Unidad de Control (FSM)** y **Camino de Datos (Datapath)**.
 
-### 3.1 Etapa 1: Diagrama de Caja Negra y Especificación de Interfaz
+### 3.1 Diagrama de Caja Negra y Especificación de Interfaz
 
 A diferencia de un esquema centrado en el encapsulado del chip de memoria, la caja negra modela el **periférico RTL sintetizable en la FPGA**, exponiendo el bus estándar del procesador a la izquierda y las $4$ líneas físicas del bus SPI a la derecha:
 
@@ -100,7 +100,7 @@ A diferencia de un esquema centrado en el encapsulado del chip de memoria, la ca
 
 ---
 
-### 3.2 Etapas 2 y 3.3: Diagrama de Bloques Control / Datapath y Condiciones de Diseño
+### 3.2 Diagrama de Bloques Control / Datapath y Condiciones de Diseño
 
 El controlador se descompone en cuatro submódulos síncronos gobernados por el reloj único `clk` ($27\text{ MHz}$): interfaz de registros MMIO (`spi_mmio_regs`), generador de pulsos de habilitación (`spi_tick_gen`), unidad de control (`spi_fsm_control`) y camino de datos (`spi_datapath`):
 
@@ -115,14 +115,14 @@ El controlador se descompone en cuatro submódulos síncronos gobernados por el 
 | `0x08` | `SPI_TX_DATA` | `R/W` | `[7:0]` `tx_data[7:0]` | Byte de datos a transmitir hacia la memoria Flash durante operaciones de escritura o configuración. |
 | `0x0C` | `SPI_RX_DATA` | `R` | `[7:0]` `rx_data[7:0]` | Último byte capturado desde `spi_miso` una vez activada la bandera `done`. |
 
-#### Condiciones para el Diseño Interno (Etapa 3.3)
+#### Condiciones para el Diseño Interno 
 1. **Sincronización de entrada asíncrona (`2-FF`):** La línea `spi_miso` atraviesa una cadena de **dos flip-flops** (`miso_sync`) muestreados a $27\text{ MHz}$ antes de ingresar al registro de desplazamiento, eliminando riesgos de metaestabilidad.
 2. **Habilitación síncrona (`sclk_tick`):** El bloque `spi_tick_gen` no genera un reloj derivado, sino un **pulso de habilitación de 1 ciclo de `clk`** cada $N = 4$ ciclos del oscilador principal, manteniendo todo el diseño en un único dominio de reloj.
 3. **Salidas registradas sin glitcheo:** Las señales físicas `spi_cs_n`, `spi_sclk` y `spi_mosi` provienen directamente de registros síncronos, evitando transitorios combinacionales (*glitches*) en los pines de la FPGA.
 
 ---
 
-### 3.3 Etapa 3: Diagrama de Tiempos SPI Modo 0 y Análisis Temporal
+### 3.3 Diagrama de Tiempos SPI Modo 0 y Análisis Temporal
 
 El siguiente diagrama detalla la temporización a nivel de ciclo de la transmisión de un byte en **SPI Modo 0** ($\text{CPOL} = 0$, $\text{CPHA} = 0$) junto con la estructura completa de trama de $5\text{ bytes}$ ($1\text{ byte Cmd} + 3\text{ bytes Addr} + 1\text{ byte Data}$) y extensión por ráfaga (`cs_hold = 1`):
 
@@ -155,7 +155,7 @@ El siguiente diagrama detalla la temporización a nivel de ciclo de la transmisi
 
 ---
 
-### 3.4 Etapas 4 a 6: Diagrama de Flujo Funcional y Clasificación FSMD
+### 3.4  Diagrama de Flujo Funcional y Clasificación FSMD
 
 El flujo comportamental síncrono del controlador clasifica cada operación según su pertenencia a la **Unidad de Control (`Candidate Control` en amarillo)**, al **Camino de Datos (`Candidate Datapath` en verde)** o al **Reinicio Compartido (`Shared Reset` en gris)**:
 
@@ -166,7 +166,7 @@ El flujo comportamental síncrono del controlador clasifica cada operación seg�
 
 ---
 
-### 3.5 Etapas 7 a 9: Carta ASMD, FSM de Control y Tabla de Transiciones RT
+### 3.5 Carta ASMD, FSM de Control y Tabla de Transiciones RT
 
 A partir de la clasificación funcional se obtiene la **Máquina de Estados Finitos (FSM)** de $5$ estados codificados en $3\text{ bits}$ (`state[2:0]`) y su **Carta ASMD** con las transferencias entre registros (RTL) condicionales en cada flanco de subida de `clk`:
 
