@@ -31,7 +31,7 @@ El reparto físico de los $26$ bloques BSRAM ($58.5\text{ KB}$) del chip Gowin G
 
 ### 2.1 Acuerdos de Integración entre Subgrupos
 
-Para garantizar la coherencia estructural de toda la consola en el repositorio `Proyecto-Digital1-GRUPO9`, el Subgrupo G2 adopta los siguientes parámetros acordados con los demás equipos:
+Para garantizar la coherencia estructural de toda la consola, el Subgrupo G2 adopta los siguientes parámetros acordados con los demás equipos:
 
 * **Reloj Maestro Unificado ($27\text{ MHz}$):** Todo el SoC dentro de la FPGA de la consola opera de forma síncrona con el oscilador base de $27\text{ MHz}$ ($T_{\text{clk}} \approx 37.04\text{ ns}$), evitando cruces de dominios de reloj (CDC) entre CPU, memorias y periféricos.
 * **Contrato de Bus Estándar del Curso:** Todos los controladores periféricos implementan la interfaz síncrona estándar (`clk`, `rst`, `cs`, `addr`, `rd`, `wr`, `d_in`, `d_out`).
@@ -191,7 +191,7 @@ A partir de la clasificación funcional se obtiene la **Máquina de Estados Fini
 
 ---
 
-## 4. Inferencia y Manejo de BRAM Dual-Port (Alineación con G4)
+## 4. Inferencia y Manejo de BRAM Dual-Port 
 
 Para resolver el acceso concurrente entre la escritura de píxeles por software (FemtoRV32) y la lectura continua de barrido multiplexado $1/32\text{ scan}$ del panel LED $64 \times 64$ (Subgrupo G4), la memoria de video se implementa mediante **dos bancos independientes de BSRAM *Simple Dual-Port*** de $2048 \times 3\text{ bits}$ ($1.5\text{ KB}$ totales):
 
