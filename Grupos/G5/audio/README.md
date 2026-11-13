@@ -128,37 +128,25 @@ Parámetros **(propuesta)**: HCLK = 25 MHz, 32 HCLK por BCLK, 16 BCLK por slot, 
  
 #### 2.3.1 Figura 1. Trama completa
  
-```
-         |<------ Slot izquierdo (16 BCLK) ------>|<------ Slot derecho (16 BCLK) ------>|
-LRCLK  ‾‾|________________________________________|‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾|__
-DIN       [ s7 … s0 | 0 0 0 0 0 0 0 0 ]            [ s7 … s0 | 0 0 0 0 0 0 0 0 ]
-          ^ misma muestra de 8 bits en ambos slots            |<---- 1024 HCLK ---->|
-```
+![Figura 1. Trama I2S completa: LRCLK y DIN en los slots izquierdo y derecho](diagramas/fig1_trama_i2s.png)
+ 
+La misma muestra de 8 bits se envía en el slot izquierdo y en el derecho. En cada slot, los 8 bits de la muestra ocupan los bits 15:8 de la palabra y los bits 7:0 son ceros. Cada palabra de DIN comienza un BCLK después del cambio de LRCLK.
  
 #### 2.3.2 Figura 2. Detalle en el cambio de LRCLK
  
-Cada período Pn dura 4 caracteres; el flanco de subida de BCLK está al inicio y el de bajada en la mitad. LRCLK y DIN cambian en los flancos de bajada.
+![Figura 2. Detalle de BCLK, LRCLK y DIN en el cambio de LRCLK](diagramas/fig2_detalle_lrclk.png)
  
-```
-          P0  P1  P2  P3  P4  P5  P6  P7  P8  P9
-BCLK      ‾‾__‾‾__‾‾__‾‾__‾‾__‾‾__‾‾__‾‾__‾‾__‾‾__
-LRCLK     ‾‾______________________________________
-DIN       r1|r0 |s7 |s6 |s5 |s4 |s3 |s2 |s1 |s0 |0
-muestreo  ^   ^   ^   ^   ^   ^   ^   ^   ^   ^
-              r0          s7 (primer bit de la muestra, un BCLK después de LRCLK)
-```
+LRCLK y DIN cambian en los flancos de bajada de BCLK, y el receptor muestrea en los flancos de subida (flechas). `r1` y `r0` son los dos últimos bits de la palabra anterior (slot derecho). LRCLK baja en la mitad de P0; en el flanco de subida de P1 el receptor todavía lee `r0`, y `s7` (el MSB) se muestrea recién en P2. Después de `s0` siguen ocho ceros hasta completar los 16 bits del slot.
  
-`r1`, `r0` son los dos últimos bits de la palabra anterior (slot derecho). LRCLK baja en la mitad de P0. En el flanco de subida de P1 el receptor todavía lee `r0`, y `s7` se muestrea recién en P2. Después de `s0` siguen ocho ceros hasta completar los 16 bits del slot.
+#### 2.3.3 Relación con HCLK
  
-#### 2.3.3 Figura 3. Relación con HCLK
+Un contador libre `cnt[9:0]` cuenta 0…1023 en HCLK y de él salen todas las señales:
  
-Contador libre `cnt[9:0]`, que cuenta 0…1023 en HCLK:
- 
-```
-cnt[4:0]  0 ......... 15 16 ........ 31 | 0 ...      BCLK = cnt[4]  (32 HCLK)
-cnt[8:5]  índice de bit dentro del slot (0…15)
-cnt[9]    slot: 0 izquierdo, 1 derecho                LRCLK desplazado 1 BCLK respecto al MSB
-```
+| Bits del contador | Significado |
+|---|---|
+| `cnt[4:0]` | Posición dentro de un período de BCLK (0…31); BCLK = `cnt[4]` |
+| `cnt[8:5]` | Índice de bit dentro del slot (0…15) |
+| `cnt[9]` | Slot: 0 izquierdo, 1 derecho; LRCLK va desplazado 1 BCLK respecto al MSB |
  
 Las salidas BCLK, LRCLK y DIN se cargan en registros en el flanco de HCLK donde `cnt[4:0]` pasa de 31 a 0, que equivale al flanco de bajada de BCLK. El ASMD y las transferencias exactas se definen en el siguiente paso del método.
  
