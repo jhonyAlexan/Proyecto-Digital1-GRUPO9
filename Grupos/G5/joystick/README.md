@@ -10,8 +10,9 @@ Una ESP32 lee un joystick analógico de dos ejes con botón y envía las lectura
 
 ## 2. Fundamento
 
-> **Pendiente.** Listo cuando: el principio de funcionamiento del periférico cabe en uno o dos párrafos claros.
+El joystick analógico permite detectar movimientos en dos ejes (X e Y) y la pulsación de un botón. La ESP32 recibe las señales de los ejes, las convierte en valores digitales mediante su conversor analógico-digital (ADC) y lee el estado del botón. Posteriormente, transmite esta información a la FPGA mediante comunicación serial UART. De esta manera, la ESP32 se encarga de adquirir las señales del joystick, mientras que la FPGA recibe los datos digitales.
 
+Dentro de la FPGA, el periférico del joystick procesa la información recibida y almacena los valores de los ejes y del botón en registros mapeados en memoria. El procesador femtoRV32 puede consultar estos registros a través del bus del sistema para conocer la posición del joystick y utilizarla como entrada de control de la consola. Así, el joystick se integra al sistema sin que el procesador tenga que realizar directamente la conversión de las señales analógicas.
 ## 3. Etapa de diseño
 
 ### 3.1 Diagrama de caja negra
