@@ -1,6 +1,6 @@
 # Periférico: Audio
 
-El procesador femtoRV32 escribe en registros mapeados en memoria qué sonido generar, y el periférico produce la señal que llega al parlante. El método de generación y el hardware de salida están por definir.
+El procesador femtoRV32 escribe en registros mapeados en memoria qué sonido generar, y el periférico produce la señal que llega al parlante. El periférico genera tonos de onda cuadrada con muestras de 8 bits y las envía por I2S al amplificador MAX98357A, que convierte a analógico y maneja el parlante.
 
 > Estado de cada sección y preguntas abiertas: [README del equipo](../README.md).
 
