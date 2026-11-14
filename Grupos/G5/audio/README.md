@@ -6,23 +6,67 @@ El procesador femtoRV32 escribe en registros mapeados en memoria qué sonido gen
  
 ## 1. Marco teórico
  
+> **En progreso.** Listo cuando: los conceptos que el lector necesita (generación digital de tonos, método de salida elegido, periféricos mapeados en memoria) están explicados y con fuentes citadas.
+
+Esta sección sigue el camino del sonido en este diseño: cómo se digitaliza (1.1), cómo un circuito genera un tono (1.2), cómo la muestra viaja por I2S (1.3) hasta el amplificador (1.4), cómo se ajusta a 8 bits y a la memoria disponible (1.5) y cómo el procesador controla el periférico (1.6). La sección 1.7 compara el método elegido con la alternativa que propone el curso, el PWM, y la 1.8 resume qué decisión de diseño condiciona cada concepto. Las cifras tomadas de una fuente llevan su referencia entre corchetes. Lo que calculó o dedujo el equipo se marca como *(cálculo propio)* o *(razonamiento propio)*, y los cálculos se pueden repetir con los datos del texto.
+
 ### 1.1 Audio digital: muestreo y cuantización
  
-Un sonido digital es una secuencia de muestras tomadas a una frecuencia fs. Por el teorema de Nyquist, solo se representan frecuencias menores que fs/2. Cada muestra se cuantiza con N bits; con N = 8 hay 256 niveles y una relación señal-ruido ideal de 6,02·N + 1,76 ≈ 49,9 dB. Es suficiente para efectos y tonos de un juego, no para música de alta fidelidad.
+Un sonido digital es una secuencia de muestras tomadas a una frecuencia fs. Por el teorema de Nyquist, solo se representan frecuencias menores que fs/2 [1]. Si la señal tiene componentes por encima de fs/2 ocurre aliasing: esas componentes aparecen como una frecuencia más baja [1].
+
+Cada muestra se cuantiza con N bits; con N = 8 hay 256 niveles. La relación señal-ruido ideal (SNR) de un convertidor de N bits, para una señal sinusoidal de escala completa, es [2]:
+
+$$
+\mathrm{SNR} = 6{,}02\,N + 1{,}76\ \mathrm{dB}
+$$
+
+Con N = 8 resulta ≈ 49,9 dB *(cálculo propio)*. Es suficiente para efectos y tonos de un juego, no para música de alta fidelidad.
  
 ### 1.2 Generación digital de tonos: acumulador de fase
  
-Un registro de fase de 16 bits aumenta en `FREQ` en cada muestra. Su bit más significativo alterna entre 0 y 1 y forma una onda cuadrada:
+Un registro de fase de 16 bits aumenta en `FREQ` en cada muestra. Su bit más significativo alterna entre 0 y 1 y forma una onda cuadrada. La fase avanza módulo 2<sup>16</sup> y la muestra de salida depende de su bit 15:
+
+$$
+\mathrm{fase}[n+1] = \left(\mathrm{fase}[n] + \mathrm{FREQ}\right) \bmod 2^{16}
+$$
+
+$$
+\mathrm{muestra}[n] =
+\begin{cases}
+{+}\mathrm{VOL} & \text{si } \mathrm{fase}_{15}[n] = 1 \\
+{-}\mathrm{VOL} & \text{si } \mathrm{fase}_{15}[n] = 0
+\end{cases}
+$$
+
+Una vuelta completa del registro dura en promedio 2<sup>16</sup>/FREQ muestras, y en cada vuelta el bit 15 completa un ciclo. Por tanto, la frecuencia de salida es *(razonamiento propio)*:
+
+$$
+f_{\mathrm{salida}} = \frac{f_s}{2^{16}/\mathrm{FREQ}} = \frac{\mathrm{FREQ} \cdot f_s}{2^{16}}
+$$
  
-    fase[n+1] = fase[n] + FREQ        (módulo 2^16)
-    f_salida  = FREQ · fs / 2^16
-    muestra   = fase[15] ? +VOL : −VOL
- 
-Con fs ≈ 24 414 Hz la resolución de frecuencia es ≈ 0,37 Hz. Ejemplo: La4 (440 Hz) usa FREQ = 1181, que produce 439,97 Hz. La amplitud ±VOL es simétrica, así que no hay componente continua.
+Con fs ≈ 24 414 Hz la resolución de frecuencia es ≈ 0,37 Hz. Ejemplo: La4 (440 Hz) usa FREQ = 1181, que produce 439,96 Hz. La amplitud ±VOL es simétrica, así que no hay componente continua.
+
+Esa resolución es el cambio de frecuencia por cada unidad de `FREQ`, es decir, fs dividida entre 2<sup>16</sup>. Se hace más gruesa cuando fs sube, y cada bit más en el registro de fase la reduce a la mitad *(razonamiento propio)*. Como `FREQ` es entero, el error máximo de una nota es media resolución, ≈ 0,19 Hz con fs = 24 414 Hz *(cálculo propio)*.
+
+**De la nota a `FREQ`.** Para una nota de número MIDI m, con A4 (m = 69) fijada por convención en 440 Hz [3], la frecuencia en afinación temperada es:
+
+$$
+f_m = 440 \cdot 2^{\frac{m-69}{12}}\ \mathrm{Hz}
+$$
+
+El valor que se escribe en `FREQ` es el entero más cercano a la expresión siguiente *(razonamiento propio)*:
+
+$$
+\mathrm{FREQ} = \mathrm{round}\left(\frac{f_m \cdot 2^{16}}{f_s}\right)
+$$
+
+Con fs = 24 414,0625 Hz, A4 da `FREQ` = 1181 (439,96 Hz) y el do central, C4 (m = 60, 261,63 Hz), da `FREQ` = 702 (261,52 Hz) *(cálculo propio)*.
+
+**fs no es libre.** Los valores anteriores suponen HCLK = 25 MHz y 1024 ciclos por trama (2.3), y el amplificador solo admite ciertas frecuencias de muestreo (1.4). Si fs cambia, `FREQ` se recalcula: con 512 ciclos por trama (fs = 48 828 Hz, ver 1.4), A4 usa `FREQ` = 591 (440,33 Hz) y la resolución pasa a ≈ 0,75 Hz *(cálculo propio)*.
  
 ### 1.3 El bus I2S
  
-I2S transmite audio con tres líneas:
+I2S transmite audio con tres líneas. La especificación original las llama SCK, WS y SD [4]; algunas hojas de datos, como la del MAX98357A, las llaman BCLK, LRCLK y DIN [5]. Este documento usa los nombres BCLK, LRCLK y DIN:
  
 | Línea | Función |
 |---|---|
@@ -32,16 +76,58 @@ I2S transmite audio con tres líneas:
  
 Reglas de temporización:
  
-- El transmisor cambia DIN y LRCLK en el flanco de bajada de BCLK. El receptor muestrea DIN en el flanco de subida.
-- El MSB aparece un período de BCLK después del cambio de LRCLK. Esa es la característica distintiva del modo I2S.
+- El transmisor cambia DIN y LRCLK en el flanco de bajada de BCLK. El receptor muestrea DIN en el flanco de subida [4]. La especificación deja libre el flanco en que cambia el transmisor [4]; el de bajada hace que DIN llegue estable al flanco de subida del receptor *(razonamiento propio)*.
+- El MSB aparece un período de BCLK después del cambio de LRCLK [4]. Esa es la característica distintiva del modo I2S.
 - Cada trama contiene un slot izquierdo y uno derecho, y dura 1/fs.
+
+Cada receptor define qué relaciones entre BCLK y LRCLK acepta (ver 1.4). Con dos slots de N<sub>slot</sub> bits por trama, el reloj de bit debe valer *(razonamiento propio)*:
+
+$$
+f_{\mathrm{BCLK}} = 2 \cdot N_{\mathrm{slot}} \cdot f_s
+$$
+
+Con N<sub>slot</sub> = 16, BCLK vale 32 veces fs, la relación de la propuesta de 2.1 *(cálculo propio)*.
+
 ### 1.4 El amplificador MAX98357A
  
-Es un amplificador clase D con entrada digital. Contiene el DAC, así que el FPGA no necesita filtro ni conversor externo. Se alimenta con LRCLK, BCLK y DIN, sin MCLK. Según el datasheet acepta frecuencias de muestreo de 8 kHz a 96 kHz y datos de 16, 24 o 32 bits en modo I2S. La variante A espera I2S estándar. El canal se elige con SD_MODE, que también sirve para apagarlo, y la ganancia (3 a 15 dB) se fija con GAIN_SLOT. Ambos son pines de configuración física, no registros.
+Es un amplificador clase D con entrada digital [5]. Contiene el DAC, así que el FPGA no necesita filtro ni conversor externo. Se alimenta con LRCLK, BCLK y DIN, sin MCLK [5]. Según el datasheet acepta frecuencias de muestreo de 8 kHz a 96 kHz (con las restricciones que se detallan abajo) y datos de 16, 24 o 32 bits en modo I2S [5]. La variante A espera I2S estándar y la B, datos justificados a la izquierda [5]. El canal se elige con SD_MODE, que también sirve para apagarlo, y la ganancia (3 a 15 dB) se fija con GAIN_SLOT [5]. Ambos son pines de configuración física, no registros. Los valores de cada pin están en 2.2 [5, 6].
+
+El rango de 8 kHz a 96 kHz tiene restricciones: el datasheet indica que LRCLK solo admite 8, 16, 32, 44,1, 48, 88,2 y 96 kHz, y que 11,025, 12, 22,05 y 24 kHz no están soportadas [5]. Su tabla de características eléctricas da cuatro intervalos de LRCLK, de 7,6 a 8,4 kHz, de 15,2 a 16,8 kHz, de 30,4 a 50,4 kHz y de 83,8 a 100,8 kHz, que la tabla rotula fS1, fS2, fS3 y fS4 [5]. La tabla siguiente compara cada requisito del amplificador con la propuesta actual (HCLK = 25 MHz y 1024 ciclos por trama, 2.3) *(cálculo propio)*:
+
+| Requisito del MAX98357A [5] | Valor que exige | Propuesta actual (2.3) | ¿Cumple? |
+|---|---|---|---|
+| LRCLK, frecuencia de muestreo | Dentro de fS1, fS2, fS3 o fS4 | 24,414 kHz | No |
+| BCLK frente a LRCLK | 32, 48 o 64 veces | 32 veces | Sí |
+| Frecuencia de BCLK | 0,2432 a 25,804 MHz | 781,25 kHz | Sí |
+| Ancho de dato por slot, modo I2S | 16, 24 o 32 bits | 16 bits | Sí |
+| MCLK | No se necesita | No se genera | Sí |
+| Formato de datos | I2S (variante A) | I2S, MSB un BCLK después del cambio de LRCLK | Sí |
+
+La fs = 24 414 Hz de la propuesta queda entre fS2 y fS3, fuera de todos los intervalos, y cerca de los 24 kHz que el datasheet declara no soportados *(cálculo propio)*. Con BCLK igual a 32 veces LRCLK y k ciclos de HCLK por cada BCLK, la frecuencia de muestreo es *(razonamiento propio)*:
+
+$$
+f_s = \frac{\mathrm{HCLK}}{32 \cdot k}
+$$
+
+La tabla siguiente muestra qué valores de k dejan fs dentro de un intervalo con los dos relojes que aparecen en el proyecto: 25 MHz (propuesta de 2.3) y 27 MHz (Tang Nano 9K, según el [README del equipo](../README.md)) *(cálculo propio)*:
+
+| HCLK | k | Ciclos por trama | fs | Intervalo del datasheet |
+|---|---|---|---|---|
+| 25 MHz | 32 | 1024 | 24 414 Hz | Ninguno (propuesta actual) |
+| 25 MHz | 16 | 512 | 48 828 Hz | fS3, 1,7 % sobre 48 kHz |
+| 25 MHz | 24 | 768 | 32 552 Hz | fS3, 1,7 % sobre 32 kHz |
+| 27 MHz | 32 | 1024 | 26 367 Hz | Ninguno |
+| 27 MHz | 16 | 512 | 52 734 Hz | Ninguno, supera 50,4 kHz |
+| 27 MHz | 18 | 576 | 46 875 Hz | fS3, 2,3 % bajo 48 kHz |
+| 27 MHz | 26 | 832 | 32 452 Hz | fS3, 1,4 % sobre 32 kHz |
+
+Con 25 MHz, 512 ciclos por trama es una potencia de 2 y conserva el contador libre de 2.3.3, con 9 bits en lugar de 10. Con 27 MHz ninguna potencia de 2 cae dentro de un intervalo: haría falta un contador que llegue hasta 576 u 832 ciclos, o un PLL que genere un HCLK adecuado, si la placa lo permite. Por ejemplo, 24,576 MHz entre 512 ciclos por trama da exactamente 48 kHz *(cálculo propio)*.
+
+Una LRCLK fuera de los intervalos es una condición que el fabricante declara no soportada, así que conviene elegir un valor dentro de ellos y confirmarlo en la placa. La decisión depende del reloj de la placa final y es del equipo.
  
 ### 1.5 Muestras de 8 bits y uso de memoria
  
-La interfaz del MAX98357A acepta 16, 24 o 32 bits por slot, no 8. Se usa un slot de 16 bits con la muestra de 8 bits (con signo, −128…127) en los bits 15:8; el hardware fuerza a cero los bits 7:0. Esos ocho ceros se generan en el transmisor y no se almacenan.
+La interfaz del MAX98357A acepta 16, 24 o 32 bits por slot, no 8 [5]. Se usa un slot de 16 bits con la muestra de 8 bits (con signo, −128…127) en los bits 15:8; el hardware fuerza a cero los bits 7:0. Esos ocho ceros se generan en el transmisor y no se almacenan.
  
 Si el contenido viene de audio de 8 bits sin signo (como WAV), hay que invertir el MSB (`XOR 0x80`) para pasarlo a complemento a dos. Cada muestra se envía en ambos slots, para que el sonido sea el mismo con SD_MODE en izquierdo, derecho o mezcla.
  
@@ -65,14 +151,74 @@ La restricción de 8 bits busca minimizar la memoria que ocupa el sonido. La RAM
  
 ### 1.6 Periférico mapeado en memoria
  
-El CPU accede al periférico con cargas y almacenamientos a direcciones fijas (MMIO), sin instrucciones especiales. La estructura sigue la de UART8N1: decodificador local, control de registros y core, descrita en la sección 12 de la guía de la UART. A diferencia de la UART, aquí no hay protocolo de aceptación (START/BUSY/DONE): los registros fijan el sonido y el hardware lo mantiene hasta que se cambien.
- 
-### Fuentes
- 
-- Maxim/Analog Devices. *MAX98357A/MAX98357B: PCM Input Class D Audio Power Amplifiers*, datasheet. https://www.analog.com/en/MAX98357A/datasheet
-- Philips Semiconductors. *I2S bus specification*, 1986, rev. 5 jun 1996. **(verificar enlace)**
-- DFRobot. *MAX98357A I2S Digital Amplifier Module (DFR0954)*, wiki. https://wiki.dfrobot.com/SKU_DFR0954_MAX98357_I2S_Amplifier_Module (valores de GAIN y SD del módulo; verificar contra la placa usada)
-- Guía UART 8N1 del proyecto, secciones 5.4 (método por transferencias entre registros) y 12 (integración MMIO).
+El CPU accede al periférico con cargas y almacenamientos a direcciones fijas (MMIO), sin instrucciones especiales. La estructura sigue la de UART8N1: decodificador local, control de registros y core, descrita en la sección 12 de la guía de la UART [7]. A diferencia de la UART, aquí no hay protocolo de aceptación (START/BUSY/DONE): los registros fijan el sonido y el hardware lo mantiene hasta que se cambien.
+
+La arquitectura del curso usa un solo bus de memoria con periféricos mapeados en memoria [8]. El manual de RISC-V indica que distintos rangos del espacio de direcciones pueden contener memoria principal o dispositivos de E/S, y que las lecturas y escrituras a dispositivos de E/S pueden tener efectos secundarios visibles, a diferencia de los accesos a memoria principal [9]. En el SoC del curso, cuando el firmware escribe en la ventana de un periférico, el adaptador del bus (`WishbonePeripheral`) le entrega durante un ciclo las señales `cs`, `wr`, `addr` (el desplazamiento dentro de la ventana) y `d_in` (el valor escrito), y responde `ack` al bus [10]. Como `d_in` es válido solo un ciclo, el periférico debe guardar el valor en un registro propio y generar el sonido de forma autónoma a partir de él *(razonamiento propio)*. Por eso `FREQ`, `VOL` y `CONTROL` son registros, con el mapa de 2.4.
+
+### 1.7 PWM como alternativa y por qué se elige I2S
+
+El documento de la fase de diseño propone dos métodos de salida de audio: «Audio por PWM a un parlante pequeño (simple, sin DAC)» y «Audio por I2S hacia un DAC externo (más fiel, más pines y más estudio)». Pide elegir «la más adecuada para su juego» y justificar «por qué esa y no otra» [8]. Este diseño usa I2S, como indica la introducción del documento. Esta subsección explica el PWM, que es la alternativa, y compara los dos métodos.
+
+#### 1.7.1 PWM
+
+La modulación por ancho de pulso (PWM) es una señal digital de frecuencia fija cuyo ciclo de trabajo D, la fracción del período en nivel alto, se modula. El ciclo de trabajo determina la amplitud de la forma de onda analógica: un ciclo del 50 % da una señal analógica con la mitad de la tensión de alimentación [11]. Por definición de valor medio de una señal periódica, el valor medio de la salida es *(razonamiento propio)*:
+
+$$
+\bar{V} = D \cdot V_{DD}, \qquad 0 \le D \le 1
+$$
+
+donde V<sub>DD</sub> es la tensión del nivel alto. Para obtener la señal analógica se usa un filtro pasa bajos, por ejemplo uno RC pasivo simple, que elimina la frecuencia base del PWM y deja pasar la señal [11]. El ancho de banda de la señal deseada, F<sub>bw</sub>, debe ser mucho menor que la frecuencia del PWM, F<sub>PWM</sub> [12]:
+
+$$
+F_{bw} \ll F_{PWM}
+$$
+
+Si la señal analógica va a una entrada de baja impedancia, como un parlante, debe conectarse un amplificador buffer entre la salida del filtro y la carga [11].
+
+La frecuencia del PWM depende del reloj y del número de bits B del contador. Si el contador avanza un paso por ciclo de reloj y un período de PWM es una vuelta completa del contador *(razonamiento propio)*:
+
+$$
+F_{PWM} = \frac{f_{clk}}{2^{B}}
+$$
+
+Con 27 MHz, un contador de 8 bits da 105,5 kHz y uno de 10 bits da 26,4 kHz *(cálculo propio)*. Más bits dan más niveles de amplitud pero una frecuencia de PWM más baja, y esa frecuencia debe seguir muy por encima del ancho de banda de la señal [12].
+
+El documento del curso describe el audio por PWM como un parlante pequeño conectado directamente a un pin, con PWM generado por hardware o por software [8]. Para una onda cuadrada de solo dos niveles, ese pin puede alternar a la frecuencia del tono sin variar el ciclo de trabajo; el PWM con filtro hace falta para formas de onda con más niveles *(razonamiento propio)*.
+
+#### 1.7.2 Comparación
+
+| Criterio | PWM | I2S con MAX98357A |
+|---|---|---|
+| Descripción en el documento del curso [8] | «simple, sin DAC» | «más fiel, más pines y más estudio» |
+| Pines de salida de la FPGA | 1 [8] | 3: BCLK, LRCLK y DIN [4] |
+| Conversión a señal analógica | Filtro pasa bajos y, para un parlante, buffer [11] | Dentro del amplificador (entrada digital PCM), sin filtro de salida [5] |
+| Qué limita la resolución | Bits B del contador frente a la frecuencia del PWM, ver 1.7.1 *(cálculo propio)* | Bits por slot que admite el amplificador: 16, 24 o 32 [5] |
+| Condición del reloj | Ancho de banda de la señal mucho menor que la frecuencia del PWM [12] | BCLK de 32, 48 o 64 veces LRCLK y LRCLK dentro de los intervalos de 1.4 [5] |
+| Con un reloj de 27 MHz | PWM de 105,5 kHz con 8 bits o de 26,4 kHz con 10 bits *(cálculo propio)* | fs de 46 875 Hz con k = 18, según 1.4 *(cálculo propio)* |
+
+#### 1.7.3 Justificación de I2S (propuesta)
+
+El documento del curso pide justificar «por qué esa y no otra» [8]. Con lo anterior, estas son las razones para usar I2S con el MAX98357A. Son una propuesta *(razonamiento propio)* que el equipo debe confirmar:
+
+1. **Integración.** El amplificador recibe la muestra digital y entrega la salida para el parlante sin filtro de salida [5]. Con PWM, obtener una señal analógica para un parlante exige filtro pasa bajos y buffer [11].
+2. **Resolución y reloj independientes.** En PWM, la resolución y la frecuencia del PWM compiten por el mismo reloj (ecuación de 1.7.1). En I2S, los bits por muestra y la frecuencia de muestreo se eligen por separado, con las condiciones de 1.4.
+3. **Crecimiento.** La muestra de 8 bits cabe en un slot de 16 y pasar a 16 bits no cambia el bus (1.5).
+
+El costo es el que anticipa el documento del curso: tres pines en vez de uno y más estudio, porque hay que diseñar el transmisor I2S y cumplir su temporización [8].
+
+### 1.8 De los conceptos a las decisiones de diseño
+
+La tabla indica qué decisión de diseño condiciona cada concepto y en qué parte del documento se usa.
+
+| Concepto | Decisión de diseño que condiciona | Se usa en |
+|---|---|---|
+| 1.1 Muestreo y cuantización | Frecuencia de muestreo y ancho de la muestra | 2.1 y 2.3 |
+| 1.2 Acumulador de fase | Ancho de `FREQ`, resolución de frecuencia y valor de `FREQ` de cada nota | 2.4, 3.2 y 3.3 |
+| 1.3 Bus I2S | Temporización de BCLK, LRCLK y DIN | 2.3 y 3.6 |
+| 1.4 Amplificador MAX98357A | HCLK, ciclos por trama y configuración de los pines SD y GAIN | 2.2, 2.3 y 3.2 |
+| 1.5 Muestras de 8 bits y memoria | Muestra en los bits 15:8 y ningún audio almacenado | 2.1 y 3.3 |
+| 1.6 Periférico mapeado en memoria | Mapa de registros y escritura en un ciclo | 2.4, 3.2 y 3.6 |
+| 1.7 PWM frente a I2S | Método de salida y número de pines | 3.2 |
 
 ## 2. Fundamento
  
@@ -224,4 +370,26 @@ Los valores se aplican en la siguiente muestra. Escribirlos mientras suena es se
 
 ## Referencias
 
-> Se agregan a medida que se usan.
+[1] W. Kester, «What the Nyquist Criterion Means to Your Sampled Data System Design», Analog Devices, tutorial MT-002. Copia consultada en: https://wcm-cce.cldnet.analog.com/media/en/training-seminars/tutorials/mt-002.pdf (consultado el 12 de noviembre de 2026).
+
+[2] W. Kester, «Taking the Mystery out of the Infamous Formula, "SNR = 6.02N + 1.76dB," and Why You Should Care», Analog Devices, tutorial MT-001, rev. A, octubre de 2008. Copia consultada en: https://forums.parallax.com/discussion/download/130098/MT-001.pdf (consultado el 13 de noviembre de 2026).
+
+[3] J. Wolfe, «Note names, MIDI numbers and frequencies», University of New South Wales. Disponible en: https://newt.phys.unsw.edu.au/jw/notes.html (consultado el 12 de noviembre de 2026).
+
+[4] Philips Semiconductors, «I2S bus specification», 1986, revisada el 5 de junio de 1996. Copia consultada en: https://www.fdi.ucm.es/profesor/mendias/PSyD/docs/I2SBUS.pdf (consultado el 12 de noviembre de 2026).
+
+[5] Maxim Integrated (hoy Analog Devices), «MAX98357A/MAX98357B: PCM Input Class D Audio Power Amplifiers», hoja de datos, Rev. 13, julio de 2019. Página del fabricante: https://www.analog.com/en/MAX98357A/datasheet. Copia consultada en: https://www.makerguides.com/wp-content/uploads/2026/01/Datasheet_MAX98357A.pdf (consultado el 13 de noviembre de 2026).
+
+[6] DFRobot, «MAX98357A I2S Digital Amplifier Module (DFR0954)», wiki. Disponible en: https://wiki.dfrobot.com/SKU_DFR0954_MAX98357_I2S_Amplifier_Module (valores de GAIN y SD del módulo; verificar contra la placa usada).
+
+[7] Guía UART 8N1 del proyecto, secciones 5.4 (método por transferencias entre registros) y 12 (integración MMIO).
+
+[8] Documento de la fase de diseño del curso, «Fase de Diseño. Proyecto: Consola de Videojuegos en FPGA»: apartados «1.2 Núcleo de procesador», «1.5 Salidas» y «Entregable E: Selección y justificación de periféricos» (subsección «Salidas»).
+
+[9] RISC-V International, «The RISC-V Instruction Set Manual», volumen de instrucciones base no privilegiadas, capítulo «Introduction», sección «Memory». Copia del repositorio del manual consultada en: https://mirror.iscas.ac.cn/riscv-toolchains/git/riscv/riscv-isa-manual.git/tree/src/intro.adoc (consultado el 12 de noviembre de 2026).
+
+[10] Plantilla del curso, `template/diagramas/README.md`, sección «Flujo de una operación de firmware sobre un periférico».
+
+[11] Microchip Technology, «AVR131: Using the AVR's High-speed PWM», sección 2.2 «Analog Waveform Generation from PWM Signal», documentación en línea (sin fecha de publicación visible). Disponible en: https://onlinedocs.microchip.com/oxy/GUID-15F56EF1-EBFF-405A-9412-E41CC95BAACF-en-US-2/GUID-34AC5DDB-B9AE-4272-842B-E2A1CEE69B6B.html (consultado el 12 de noviembre de 2026).
+
+[12] A. Palacherla, «Using PWM to Generate Analog Output», Microchip Technology, nota de aplicación AN538 (DS00538C), noviembre de 1999. Copia consultada en: https://rose-hulman.edu/Class/ee/radu/ece333/Labs/an538_pwm.pdf (consultado el 12 de noviembre de 2026).
