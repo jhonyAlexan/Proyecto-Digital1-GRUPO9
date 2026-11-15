@@ -144,6 +144,20 @@ Estas reglas se formalizan en el diagrama de flujo, el ASMD y la máquina de est
 
 ### 7. ASMD: del flujo a las transferencias por ciclo
 
+![ASMD del barrido](asmd_g4.png)
+
+
+Figura 10: ASMD del barrido. Cada recinto punteado es un bloque ASM asociado a un estado. Los rectángulos amarillos son estados con sus salidas; los rombos evalúan condiciones; las cajas redondeadas son transferencias condicionales, con fondo verde para operaciones de datos y amarillo para acciones de control. Los conectores (I, 1, 2, S, L, D) nombran el próximo estado. El superíndice ⁺ denota el valor que se carga en el próximo flanco de subida. T1 a T8 corresponden a las filas de la tabla de transferencias.
+
+Lectura de la figura:
+- Los tres estados que envían columnas (INIT1, INIT2 y SHIFT) comparten el bloque **S**; solo cambian el dato, la zona de `LAT` y el estado siguiente, según la tabla de parámetros.
+- Cada recorrido desde la caja de estado hasta un conector ocurre en un solo ciclo: los rombos y las cajas no agregan ciclos.
+- `last_col = (col = 63)`, `last_cnt = (cnt = DT − 1)` y `oe_on = (cnt < BRIGHT)` se calculan en el datapath con los valores anteriores al flanco. La decisión de qué rama seguir es del controlador.
+- En DISPLAY, T7 y T8 hacen las mismas transferencias; solo cambia el próximo estado según `EN`.
+
+> Uso de IA: la figura 10 se generó con ayuda de un asistente de IA (Claude) a partir del diseño del grupo y se comprobó contra la tabla de transferencias y la simulación del controlador.
+
+
 El ASMD organiza el barrido en bloques asociados a los estados y fija qué se carga en el próximo flanco de subida de `clk`. Los estados que envían columnas (INIT1, INIT2 y SHIFT) tienen el mismo bloque, que se llama *S*, y solo cambian tres parámetros:
 
 | Estado | dato(`col`) en las 6 líneas | zona(`col`) = `LAT` al presentar | Al terminar pasa a |
