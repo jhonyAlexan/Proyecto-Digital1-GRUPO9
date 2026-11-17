@@ -1,7 +1,28 @@
 # Controlador IMU BMI160 por SPI y Detector de Golpes (Tang Nano 9K)
-Grupo 3: Kennet, Jeimy, Alexander 
+Grupo 3: Kennet, Jeimy, Alexander.
+
 Còdigo en Verilog para leer aceleración y velocidad angular desde una IMU **BMI160** mediante protocolo SPI (Modo 0) en una FPGA **Tang Nano 9K**, la idea es que el sistema calcule la intensidad del movimiento en tiempo real y entrega una señal digital (`1` o `0`) ante golpes o giros bruscos.
 La direcciòn del golpe o giro es indiferente.
+
+## Estructura del Proyecto y Ubicación de Archivos
+
+Los archivos se organizan asi:
+
+```text
+IMU_Proyecto/
+├── Makefile                    # Automatiza síntesis, ruteo y carga en la FPGA
+├── tangnano9k.cst               # Asignación física de pines (SPI, reloj, LEDs y salida)
+├── .gitignore                   # Ignora archivos temporales (.fs, .json, .vcd, .vvp)
+├── rtl/                         # Código fuente sintetizable en Verilog
+│   ├── spi_master.v             # Controlador físico SPI Modo 0 (16 bits)
+│   ├── detector_golpe.v         # Cálculo de energía del movimiento y filtro anti-rebote
+│   ├── uart_tx.v                # Transmisor serial para depuración en consola (115200 baudios)
+│   ├── top.v                    # Módulo principal autónomo (Pruebas + LEDs + Pin 29)
+│   └── periferico_imu_simple.v  # Adaptador MMIO de 1 bit para conectar al bus del FemtoRV
+└── sim/                         # Archivos exclusivos de simulación
+    └── tb_imu.v                 # Testbench para verificar ondas SPI en GTKWave
+```
+
 
 ## 1. Conexiones Físicas (Pinout)
 
