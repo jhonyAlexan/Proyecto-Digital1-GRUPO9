@@ -1,9 +1,9 @@
 # Periférico: Pantalla RGB Matrix
 
-## UART
+## Controlador HUB75
 ### 1. Diagrama de caja negra
 
-El periférico controla la matriz **Seengreat RGB Matrix P3.0-64 × 64** desde la FPGA de la Colorlight 5A-75B. El panel tiene 4096 píxeles con un LED rojo, uno verde y uno azul cada uno, se conecta por la interfaz paralela **HUB75** y usa barrido 1/32: solo hay dos filas encendidas a la vez, la fila r y la fila r + 32. El panel no guarda la imagen; la debe refrescar continuamente el controlador, cientos de veces por segundo. 
+El periférico controla la matriz **Seengreat RGB Matrix P3.0-64 × 64** desde la FPGA de la consola (pruebas en la Tang Nano 9K, GW1NR-9). El panel tiene 4096 píxeles con un LED rojo, uno verde y uno azul cada uno, se conecta por la interfaz paralela **HUB75** y usa barrido 1/32: solo hay dos filas encendidas a la vez, la fila r y la fila r + 32. El panel no guarda la imagen; la debe refrescar continuamente el controlador, cientos de veces por segundo. 
 
 Para el resto de la consola el controlador es un periférico del SoC: el procesador le escribe registros por el bus estándar del curso y el periférico genera solo las señales del panel.
 
@@ -11,7 +11,7 @@ Para el resto de la consola el controlador es un periférico del SoC: el procesa
 
 Figura 1: Vista externa del controlador. A la izquierda, las entradas del bus del procesador; a la derecha, la salida de lectura hacia el bus y las líneas del conector **HUB75** hacia el panel. Cada línea lleva una marca diagonal y un número que indica su ancho en bits.
 
-#### Características iniciales
+#### Características de la interfaz
 - Un panel de 64×64 píxeles RGB (1R1G1B), barrido 1/32.
 - Seis líneas de color en paralelo: `R1` `G1` `B1` para las filas 0–31 y `R2` `G2` `B2` para las filas 32–63.
 - Cinco líneas de dirección de fila `A B C D E` (32 pares de filas).
@@ -25,19 +25,19 @@ Figura 1: Vista externa del controlador. A la izquierda, las entradas del bus de
 
 Los 64 píxeles de cada fila se envían secuencialmente, uno por pulso de `CLK` y por seis líneas a la vez; no existe un bus de 64 líneas hacia el panel.
 
-#### Aspectos pendientes
-La vista de caja negra muestra únicamente las líneas externas. En la siguiente sección se propone la división interna. Quedan pendientes la frecuencia de `CLK`, el tiempo de cada fila y la frecuencia de refresco, que se fijan en el análisis temporal. El reloj y el reset los impone el contrato del curso: `clk` del SoC (50 MHz) y `rst` síncrono activo en alto. El orden de colores (variante normal o GBR del panel) y la orientación de la imagen se confirman con el panel real; no cambian el diseño, solo la asignación de pines.
+#### Alcance de la vista externa
+La vista de caja negra muestra únicamente las líneas externas. En la siguiente sección se propone la división interna. Quedan pendientes la frecuencia de `CLK`, el tiempo de cada fila y la frecuencia de refresco, que se fijan en el análisis temporal. El reloj y el reset los impone el contrato del curso: `clk` del SoC (27 MHz, el mismo de G1, G2 y G3) y `rst` síncrono activo en alto. El orden de colores (variante normal o GBR del panel) y la orientación de la imagen se confirman con el panel real; no cambian el diseño, solo la asignación de pines.
 
 ### 2. Diagrama de bloques
 
-La propuesta usa el reloj común `clk` de 50 MHz. Como el generador de `baud_tick` de la UART, un generador de ticks produce pulsos de habilitación de un ciclo para el barrido; no es un reloj nuevo. La imagen vive en un framebuffer con un puerto de escritura para el procesador y uno de lectura para el barrido, de modo que ambos trabajan al mismo tiempo.
+La propuesta usa el reloj común `clk` del SoC (27 MHz). Como el generador de `baud_tick` de la UART, un generador de ticks produce pulsos de habilitación de un ciclo para el barrido; no es un reloj nuevo. La imagen vive en un framebuffer con un puerto de escritura para el procesador y uno de lectura para el barrido, de modo que ambos trabajan al mismo tiempo.
 
 #### Señales de la interfaz
 
 | Señal | Descripción |
 |---|---|
 | `rst` | Entrada común de reinicio de un bit, síncrona y activa en alto (contrato del curso). Lleva el barrido al reposo con el panel apagado; no borra la imagen. |
-| `clk` | Reloj común de todos los bloques, 50 MHz en el SoC. |
+| `clk` | Reloj común de todos los bloques, 27 MHz en el SoC. |
 | `d_in[31:0]`, `addr[4:0]`, `cs`, `rd`, `wr` | Acceso del procesador. `cs` dura un ciclo por acceso; `addr` es el desplazamiento en bytes dentro de la ventana del periférico. |
 | `d_out[31:0]` | Dato leído, combinacional mientras `cs` y `rd` estén activos. |
 | `enable` | Bit `EN` del registro `CONTROL`: 1 configura el panel y barre. |
@@ -65,8 +65,8 @@ Figura 2: Diagrama de bloques con entradas a la izquierda, salidas a la derecha,
 | 0x0C | W | `PIXEL_DATA` | `[2:0] = {R,G,B}` escribe el píxel e incrementa `PIXEL_ADDR` |
 | 0x10 | R | `FRAME` | Cuadros completos mostrados |
 
-#### Revisión y aspectos pendientes
-Todos los bloques usan `clk`. A diferencia de la UART, aquí la división del reloj puede ser entera: con `CLK_DIV = 2` se obtiene un tick cada 40 ns sin error de frecuencia, porque el panel no exige una velocidad exacta.
+#### Temporización y aspectos pendientes
+Todos los bloques usan `clk`. A diferencia de la UART, aquí la división del reloj puede ser entera: con `CLK_DIV = 2` se obtiene un tick cada 74,07 ns sin error de frecuencia, porque el panel no exige una velocidad exacta.
 
 El framebuffer se divide en dos memorias de 2048 × 3 bits, una por mitad del panel, porque en cada pulso de `CLK` el panel necesita un píxel de cada mitad. Para que la síntesis use los bloques de RAM de la ECP5, la lectura será síncrona: el dato llega un ciclo después de la dirección. El análisis temporal debe garantizar que esté listo antes de enviarlo al panel.
 
@@ -81,7 +81,7 @@ Antes de definir los bloques internos del barrido se describe el envío de un pa
 | **Fila 1** (R1 G1 B1) | 111 blanco | 100 rojo | 000 negro | ... | 111 blanco | 111 blanco |
 | **Fila 33** (R2 G2 B2) | 111 blanco | 100 rojo | 100 rojo | ... | 011 cian | 111 blanco |
 
-Cada par de filas pasa por tres fases: desplazar las 64 columnas (SHIFT), copiarlas a las salidas del panel (LATCH) y mostrarlas (DISPLAY). La unidad de tiempo es el tick: con `clk = 50 MHz` y `CLK_DIV = 2`, un tick ocurre cada 40 ns.
+Cada par de filas pasa por tres fases: desplazar las 64 columnas (SHIFT), copiarlas a las salidas del panel (LATCH) y mostrarlas (DISPLAY). La unidad de tiempo es el tick: con `clk = 27 MHz` y `CLK_DIV = 2`, un tick ocurre cada 74,07 ns.
 
 <img width="898" height="607" alt="Captura de pantalla 2026-11-07 002549" src="https://github.com/user-attachments/assets/a83577d7-1b8d-4135-a5e2-54df7a6a2f9c" />
 
@@ -108,20 +108,21 @@ Los ejemplos del fabricante (rutina `Reginit()` para Arduino y Raspberry Pi Pico
 Figura 4: Configuración del driver: dos palabras de 64 pulsos antes del primer barrido. `LAT` sube con el dato de la columna 53 (registro 1) o 52 (registro 2) y baja con el primer dato de la palabra siguiente.
 
 #### Relación entre tiempos
-Con `clk = 50 MHz`, `CLK_DIV = 2` y `DISPLAY_TICKS = 1024`:
-- T_tick = CLK_DIV * T_clk = 2 * 20 ns = 40 ns
-- T_shift = 64 * 2 * T_tick = 128 * T_tick = 5,12 µs
-- T_display = DISPLAY_TICKS * T_tick = 1024 * 40 ns = 40,96 µs
-- f_CLK = 1 / (2 * T_tick) = 12,5 MHz
-- T_latch = T_tick = 40 ns
-- T_fila = (128 + 1 + 1024) * T_tick = 1153 * 40 ns = 46,12 µs
-- T_cuadro = 32 * T_fila = 1,476 ms => f_refresco ≈ 678 Hz
-- T_config = 2 * 128 * T_tick = 10,24 µs (una sola vez)
-- Fracción encendida = BRIGHT / 1153 (0 a 88,7%)
+Con `clk = 27 MHz`, `CLK_DIV = 2` y `DISPLAY_TICKS = 1024`:
+- T_clk = 1 / 27 MHz = 37,04 ns
+- T_tick = CLK_DIV * T_clk = 2 * 37,04 ns = 74,07 ns
+- T_shift = 64 * 2 * T_tick = 128 * T_tick = 9,48 µs
+- T_display = DISPLAY_TICKS * T_tick = 1024 * 74,07 ns = 75,85 µs
+- f_CLK = 1 / (2 * T_tick) = 6,75 MHz
+- T_latch = T_tick = 74,07 ns
+- T_fila = (128 + 1 + 1024) * T_tick = 1153 * 74,07 ns = 85,41 µs
+- T_cuadro = 32 * T_fila = 2,733 ms => f_refresco ≈ 366 Hz
+- T_config = 2 * 128 * T_tick = 18,96 µs (una sola vez)
+- Fracción encendida = BRIGHT / 1153 (0 a 88,7 %)
 
-Los pulsos de tick duran un ciclo de `clk` (20 ns), no un tick completo; los diagramas son funcionales y no representan esa escala. `tick` se comprueba como nivel alto en un flanco de subida de `clk`; no se usa su flanco como reloj. El generador funciona siempre: habilitar el periférico no lo reinicia.
+Los pulsos de tick duran un ciclo de `clk` (37,04 ns), no un tick completo; los diagramas son funcionales y no representan esa escala. `tick` se comprueba como nivel alto en un flanco de subida de `clk`; no se usa su flanco como reloj. El generador funciona siempre: habilitar el periférico no lo reinicia.
 
-Criterios: por encima de unos 100-200 Hz no se percibe parpadeo, y 678 Hz deja margen. Un `CLK` de 12,5 MHz es moderado para el cable plano y los buffers 74HC245 de la placa; si el panel real muestra ruido, se sube `CLK_DIV` sin cambiar nada más (con 4: 6,25 MHz y ≈ 640 Hz). El brillo no cambia el refresco: DISPLAY siempre dura lo mismo. Para la prueba en placa sin procesador, con el reloj de 25 MHz de la tarjeta, todos los tiempos se duplican (≈ 339 Hz).
+Criterios: por encima de unos 100-200 Hz no se percibe parpadeo, y 366 Hz deja margen. Un `CLK` de 6,75 MHz es moderado para el cable plano hacia el panel. Si el panel real muestra ruido, se sube `CLK_DIV`: con 4, `CLK` baja a 3,375 MHz y el refresco a ≈ 183 Hz; reduciendo además `DISPLAY_TICKS` a 512 vuelve a ≈ 329 Hz. El brillo no cambia el refresco: DISPLAY siempre dura lo mismo. El refresco del panel no es la velocidad del juego: el juego cambia la imagen a 30-60 FPS, sincronizado con `FRAME`. Si la consola final usa otro reloj, solo cambia la duración del tick.
 
 La figura 5 muestra una columna a escala de `clk`: entre el cambio de columna y el tick que presenta el dato pasan `CLK_DIV` ciclos, y la memoria entrega el dato un ciclo después de recibir la dirección.
 
@@ -140,6 +141,58 @@ Figura 5: Detalle de tres columnas con `CLK_DIV = 2`. La columna avanza cuando s
 - El procesador puede escribir píxeles en cualquier ciclo; para no mezclar cuadros, el juego espera a que cambie `FRAME`. No se presupone doble framebuffer.
 
 Estas reglas se formalizan en el diagrama de flujo, el ASMD y la máquina de estados de los pasos siguientes.
+
+
+### 4. Diagrama de flujo del barrido
+
+El flujo desarrolla la secuencia del análisis temporal sin cambiar su temporización. Se lee primero la columna izquierda y después la derecha, siguiendo los conectores A; el conector B devuelve al reposo. Las tres operaciones de envío por columnas (dos palabras de configuración y una fila de datos) comparten el mismo procedimiento, que se dibuja una sola vez como subflujo C.
+
+
+#### Interpretación síncrona del flujo
+El diagrama no es un programa que ejecuta una caja por ciclo. Las decisiones y acciones de un recorrido pertenecen al mismo flanco de subida de `clk` con `tick = 1`:
+- En IDLE, el tick que encuentra `EN = 1` pone `col` en cero y comienza INIT1 en el mismo flanco. Ese tick no envía nada al panel.
+- En el subflujo C, presentar el dato, poner `LAT` según la zona y bajar `CLK` ocurren juntos. En el tick siguiente se sube `CLK` y, en el mismo flanco, se avanza la columna o, si era la 63, se pone en cero y se pasa al estado siguiente.
+- La comparación `col = 63` usa el valor de `col` antes del flanco. Lo mismo ocurre con `cnt = DT − 1` y con `cnt < BRIGHT` en DISPLAY.
+- El tick de LATCH sube `LAT` y carga `ROW` con r; el primer tick de DISPLAY baja `LAT` y enciende `OE`. Entre ambos no hay pulsos de `CLK`: el panel lo interpreta como latch de datos.
+- El último tick de DISPLAY apaga el panel, avanza r y decide entre seguir barriendo (SHIFT) o volver al reposo (IDLE). Cuando r pasa de 31 a 0 se cuenta un cuadro.
+- Las ramas No de las pruebas de tick conservan todos los registros. La siguiente prueba ocurre en el próximo flanco de `clk`, no al detectar un flanco de `tick`.
+
+#### Lectura previa a la arquitectura
+- **Decisiones** (candidatas al controlador): ¿hay tick?, ¿`EN`?, ¿en qué fase de la columna estamos (nivel de `CLK`)?, ¿última columna?, ¿qué se está enviando (configuración o datos)?, ¿último tick de la fila?
+- **Operaciones sobre datos** (candidatas al datapath): poner a cero e incrementar `col`, `cnt` y r; elegir el dato (patrón 1, patrón 2 o framebuffer) y cargarlo en `RGB`; cargar `ROW`; comparar `col` con 63, 53 y 52; comparar `cnt` con `DT − 1` y con `BRIGHT`; contar cuadros.
+- **Qué hay que recordar:** la columna, el par de filas, los ticks de DISPLAY, los seis bits de color y la fila mostrada (salidas registradas), el número de cuadros y la fase del proceso. La fase de la columna no necesita otro registro: la guarda el propio nivel de `CLK`.
+
+
+<img width="1159" height="1811" alt="fig1" src="https://github.com/user-attachments/assets/cf9a8059-7c23-49da-b41f-3bb830f01615" />
+
+Figura 6: Flujo funcional del barrido. Los rectángulos con barras laterales llaman al subflujo C. Las ramas No de las pruebas de tick esperan al siguiente ciclo de `clk`. RST conduce al reposo desde cualquier punto y Figura 7: Subflujo C, envío de 64 columnas. dato(`col`) y zona(`col`) dependen del estado que lo usa (INIT1, INIT2 o SHIFT). Cada columna consume dos ticks: uno presenta el dato y baja `CLK`; el otro sube `CLK`, momento en que el panel captura.
+
+
+<img width="1159" height="1809" alt="fig 3" src="https://github.com/user-attachments/assets/e3fcdea0-f1d9-4f51-bc03-c76aeff521a5" />
+
+Figura 9: Subflujo C clasificado. La zona de `LAT` la calcula el datapath con comparadores; el controlador decide cargarla en el registro `LAT`.
+
+#### Cómo interpretar los colores
+- **Columna, par de filas y contador de ticks.** Los registros `col`, r y `cnt`, su puesta a cero y su incremento son del datapath. El controlador los habilita, pero solo recibe condiciones de un bit: `last_col`, `last_cnt`, `oe_on` y las zonas.
+- **Dato de color.** Elegir entre patrón 1, patrón 2 y framebuffer, y cargar `RGB`, es del datapath. La FSM solo indica la fuente (`rgb_sel`) y cuándo cargar (`load_rgb`).
+- **Fila mostrada.** Cargar `ROW` con r es una transferencia del datapath ordenada en LATCH.
+- **Líneas de control del panel.** `CLK`, `LAT` y `OE` son salidas registradas del controlador, como `tx_done` en la UART.
+- **Espera y secuencia.** Las pruebas de tick, de `EN`, de fase y los cambios de estado pertenecen al controlador. El generador de ticks es un bloque independiente.
+- **Cuadros.** El contador `frame` es del datapath; se incrementa con la misma orden que avanza r, solo cuando r = 31.
+- **Reset y conectores.** RST va en gris porque afecta a ambos bloques. A, B y C son elementos de lectura, no componentes.
+
+> Uso de IA: el texto de las secciones 4 y 6 se elaboró con ayuda de un asistente de IA (Claude) a partir del diseño del grupo. Los dibujos del flujo y de su clasificación son propios.
+
+
+Qué va en cada color (compáralo con las figuras 3 y 4 del PDF):
+
+| Verde (datapath) | Amarillo (control) |
+|---|---|
+| `col ← 0`, `col ← col + 1`, `col = 63` (dentro del rombo) | IDLE `OE ← 1`, rombos de `tick` y de `EN` |
+| `RGB ← dato(col)`, `zona(col)` | `LAT ← …`, `CLK ← 0`, `CLK ← 1`, rombo `CLK = 1?` |
+| `ROW ← r`, `cnt ← 0`, `cnt ← cnt + 1` | `LAT ← 1`, `LAT ← 0`, `OE ← no(…)`, `OE ← 1` |
+| `cnt = DT − 1`, `cnt < BRIGHT` (dentro del rombo o del paréntesis) | Rombo `cnt = DT − 1?` como decisión |
+| `r ← r + 1`, `frame ← frame + 1 si r = 31` | Rombo `EN = 1?` del final |
 
 
 ### 7. ASMD: del flujo a las transferencias por ciclo
@@ -198,33 +251,33 @@ Observaciones:
 - En T6, si `BRIGHT >= DT`, el panel queda encendido `DT − 1` ticks: el último tick (T7 o T8) siempre lo apaga.
 - Si `EN` baja y vuelve a subir antes del último tick de una fila, se sigue barriendo sin reconfigurar el panel. La configuración solo se repite al salir de IDLE.
 
----
 
+### 11. RTL y verificación
 
- 4. Diagrama de flujo del barrido
+El RTL sigue la división de las secciones 7 a 9: un módulo por bloque, con los mismos nombres de señales del ASMD y de la tabla de transferencias.
 
-El flujo desarrolla la secuencia del análisis temporal sin cambiar su temporización. Se lee primero la columna izquierda y después la derecha, siguiendo los conectores A; el conector B devuelve al reposo. Las tres operaciones de envío por columnas (dos palabras de configuración y una fila de datos) comparten el mismo procedimiento, que se dibuja una sola vez como subflujo C.
+| Archivo | Contenido |
+|---|---|
+| `rtl/hub75_core.v` | `hub75_core`: framebuffer (2 × 2048 × 3 bits, lectura síncrona), generador de ticks, control (`hub75_ctrl`, FSM de la sección 9) y datapath (`hub75_datapath`, recursos de la sección 8) |
+| `rtl/peripheral_hub75.v` | Adaptador MMIO para FemtoRV32 Quark (sección 10.3) |
+| `rtl/tb/tb_hub75_core.v` | Banco del core derivado de la tabla de transferencias (sección 11.1) |
+| `rtl/tb/tb_peripheral_hub75.v` | Banco de registros MMIO (sección 11.2) |
+| `board/` | Prueba en la Tang Nano 9K sin procesador y pines (sección 12) |
+| `sim/` | Vistas de GTKWave |
 
+Parámetros: `CLK_DIV` (ciclos de `clk` por tick, ≥ 2 por la latencia de la memoria) y `DISPLAY_TICKS` (DT). Valores del diseño: 2 y 1024.
 
-#### Interpretación síncrona del flujo
-El diagrama no es un programa que ejecuta una caja por ciclo. Las decisiones y acciones de un recorrido pertenecen al mismo flanco de subida de `clk` con `tick = 1`:
-- En IDLE, el tick que encuentra `EN = 1` pone `col` en cero y comienza INIT1 en el mismo flanco. Ese tick no envía nada al panel.
-- En el subflujo C, presentar el dato, poner `LAT` según la zona y bajar `CLK` ocurren juntos. En el tick siguiente se sube `CLK` y, en el mismo flanco, se avanza la columna o, si era la 63, se pone en cero y se pasa al estado siguiente.
-- La comparación `col = 63` usa el valor de `col` antes del flanco. Lo mismo ocurre con `cnt = DT − 1` y con `cnt < BRIGHT` en DISPLAY.
-- El tick de LATCH sube `LAT` y carga `ROW` con r; el primer tick de DISPLAY baja `LAT` y enciende `OE`. Entre ambos no hay pulsos de `CLK`: el panel lo interpreta como latch de datos.
-- El último tick de DISPLAY apaga el panel, avanza r y decide entre seguir barriendo (SHIFT) o volver al reposo (IDLE). Cuando r pasa de 31 a 0 se cuenta un cuadro.
-- Las ramas No de las pruebas de tick conservan todos los registros. La siguiente prueba ocurre en el próximo flanco de `clk`, no al detectar un flanco de `tick`.
+Cómo simular (Icarus Verilog y GTKWave), desde `Grupos/G4/`:
 
-#### Lectura previa a la arquitectura
-- **Decisiones** (candidatas al controlador): ¿hay tick?, ¿`EN`?, ¿en qué fase de la columna estamos (nivel de `CLK`)?, ¿última columna?, ¿qué se está enviando (configuración o datos)?, ¿último tick de la fila?
-- **Operaciones sobre datos** (candidatas al datapath): poner a cero e incrementar `col`, `cnt` y r; elegir el dato (patrón 1, patrón 2 o framebuffer) y cargarlo en `RGB`; cargar `ROW`; comparar `col` con 63, 53 y 52; comparar `cnt` con `DT − 1` y con `BRIGHT`; contar cuadros.
-- **Qué hay que recordar:** la columna, el par de filas, los ticks de DISPLAY, los seis bits de color y la fila mostrada (salidas registradas), el número de cuadros y la fase del proceso. La fase de la columna no necesita otro registro: la guarda el propio nivel de `CLK`.
-```
-
+    make sim-core     # banco del core
+    make sim-regs     # banco de registros
+    make wave-core    # abre la simulación del core en GTKWave
+    make clean
 
 ---
 ### Referencias
+- Guía del curso: UART 8N1, control combinacional y actualización conjunta en subida, e integración con FemtoRV32 Quark (uart-riscv.pdf).
 - Seengreat, RGB-Matrix-P3.0-64x64 (y variante GBR), repositorio en GitHub, organización seengreat.
-- q3k, chubby75: 5a-75b/hardware_V8.0.md (pines de la Colorlight 5A-75B).
-- LiteX Boards: litex_boards/platforms/colorlight_5a_75b.py.
+- Sipeed, Tang Nano 9K: esquemático y documentación de la placa (wiki.sipeed.com).
+- Pong P. Chu, FPGA Prototyping by VHDL Examples, capítulo 6 (FSMD y ASMD).
 - C. Ababei, FSM, ASM, FSMD, ASMD, Lecture 4, Marquette University.
