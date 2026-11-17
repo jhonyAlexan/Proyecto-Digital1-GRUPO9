@@ -149,7 +149,11 @@ Dentro de la FPGA, el periférico del joystick procesa la información recibida 
 
 ### 3.1 Diagrama de caja negra
 
-> **Pendiente.** Listo cuando: todas las entradas y salidas tienen nombre, sin mostrar nada del interior.
+![Contexto del sistema y caja negra del joystick](diagramas/joystick_caja_negra.svg)
+
+La ESP32 adquiere los ejes mediante su ADC y lee el botón como entrada
+digital. La Tang Nano 9K recibe los datos digitalizados. La interfaz
+mostrada es una propuesta pendiente de contrastar con el módulo Verilog.
 
 ### 3.2 Características de la interfaz
 

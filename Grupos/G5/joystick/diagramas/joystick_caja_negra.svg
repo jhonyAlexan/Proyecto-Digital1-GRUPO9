@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="920" viewBox="0 0 1200 920" role="img" aria-labelledby="title desc">
+<title id="title">Joystick: adquisición externa y caja negra de la FPGA</title>
+<desc id="desc">La ESP32 adquiere X e Y con su ADC y lee el botón. La Tang Nano 9K recibe datos digitales. La interfaz del periférico es una propuesta pendiente de contrastar con Verilog.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="none" stroke="#000000" stroke-width="1.5"/></marker></defs>
+<rect width="1200" height="920" fill="#ffffff"/>
+<g font-family="Arial, sans-serif" fill="#000000">
+<text x="50" y="52" font-size="28" font-weight="700">Interfaz del joystick</text>
+<text x="50" y="84" font-size="17" fill="#000000">G5 · Tang Nano 9K · Propuesta de interfaz, pendiente de validar con Verilog</text>
+
+<text x="62" y="146" font-size="19" font-weight="700">Contexto del sistema</text>
+<rect x="70" y="177" width="220" height="120" fill="#ffffff" stroke="#000000"/>
+<text x="180" y="213" text-anchor="middle" font-size="21" font-weight="700">Joystick</text>
+<text x="180" y="244" text-anchor="middle" font-size="17">VRx · VRy · SW</text>
+<text x="180" y="272" text-anchor="middle" font-size="15">Dos ejes y un botón</text>
+<rect x="425" y="177" width="300" height="120" fill="#ffffff" stroke="#000000"/>
+<text x="575" y="210" text-anchor="middle" font-size="21" font-weight="700">ESP32</text>
+<text x="575" y="240" text-anchor="middle" font-size="16">ADC: X / GPIO34 · Y / GPIO35</text>
+<text x="575" y="269" text-anchor="middle" font-size="16">Entrada digital: SW / GPIO13</text>
+<rect x="865" y="177" width="260" height="120" fill="#ffffff" stroke="#000000"/>
+<text x="995" y="213" text-anchor="middle" font-size="21" font-weight="700">Tang Nano 9K</text>
+<text x="995" y="244" text-anchor="middle" font-size="17">Recepción en Verilog</text>
+<text x="995" y="272" text-anchor="middle" font-size="15">Datos ya digitalizados</text>
+<g fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"><path d="M290 238 H425"/><path d="M725 238 H865" stroke-dasharray="7 5"/></g>
+<text x="357" y="212" text-anchor="middle" font-size="14">Señales</text><text x="357" y="273" text-anchor="middle" font-size="14">del joystick</text>
+<text x="795" y="212" text-anchor="middle" font-size="14">UART prevista</text><text x="795" y="273" text-anchor="middle" font-size="14">Formato por definir</text>
+<text x="65" y="331" font-size="15" fill="#000000">El programa actual imprime texto por Serial a 115200 baudios; el enlace con la FPGA aún no está validado.</text>
+
+<text x="62" y="417" font-size="19" font-weight="700">Caja negra del periférico en la FPGA</text>
+<rect x="450" y="455" width="330" height="320" fill="white" stroke="black"/>
+<text x="615" y="592" text-anchor="middle" font-size="23" fill="black" font-weight="700">Periférico joystick</text>
+<text x="615" y="625" text-anchor="middle" font-size="17" fill="#000000">Interfaz lógica propuesta</text>
+<text x="615" y="655" text-anchor="middle" font-size="15" fill="#000000">Sin mostrar bloques internos</text>
+<text x="78" y="476" font-size="17">clk · 1 bit</text><path d="M78 485 H450" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/><text x="78" y="516" font-size="17">rst · 1 bit</text><path d="M78 525 H450" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/><text x="78" y="556" font-size="17">uart_rx · 1 bit</text><path d="M78 565 H450" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/><text x="78" y="616" font-size="17">cs, rd, wr · 1 bit cada una</text><path d="M78 625 H450" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/><text x="78" y="666" font-size="17">addr · ancho por confirmar</text><path d="M78 675 H450" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/><text x="78" y="716" font-size="17">d_in[31:0] · 32 bits</text><path d="M78 725 H450" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M780 610 H1115" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="805" y="588" font-size="18" font-weight="700">d_out[31:0] · 32 bits</text>
+<text x="805" y="642" font-size="16">Hacia la interfaz del SoC</text>
+<text x="78" y="801" font-size="15" fill="#000000">clk/rst: sistema · uart_rx: ESP32 · cs/rd/wr/addr/d_in: interfaz del SoC</text>
+<text x="50" y="860" font-size="16" fill="#000000">Los nombres y el uso de escritura se ajustarán al módulo Verilog. No se asignan pines FPGA todavía.</text>
+<text x="50" y="889" font-size="16" fill="#000000">El ADC está en la ESP32. El botón se lee como entrada digital, sin pasar por el ADC.</text>
+</g></svg>
