@@ -200,6 +200,29 @@ Observaciones:
 
 ---
 
+
+ 4. Diagrama de flujo del barrido
+
+El flujo desarrolla la secuencia del análisis temporal sin cambiar su temporización. Se lee primero la columna izquierda y después la derecha, siguiendo los conectores A; el conector B devuelve al reposo. Las tres operaciones de envío por columnas (dos palabras de configuración y una fila de datos) comparten el mismo procedimiento, que se dibuja una sola vez como subflujo C.
+
+
+#### Interpretación síncrona del flujo
+El diagrama no es un programa que ejecuta una caja por ciclo. Las decisiones y acciones de un recorrido pertenecen al mismo flanco de subida de `clk` con `tick = 1`:
+- En IDLE, el tick que encuentra `EN = 1` pone `col` en cero y comienza INIT1 en el mismo flanco. Ese tick no envía nada al panel.
+- En el subflujo C, presentar el dato, poner `LAT` según la zona y bajar `CLK` ocurren juntos. En el tick siguiente se sube `CLK` y, en el mismo flanco, se avanza la columna o, si era la 63, se pone en cero y se pasa al estado siguiente.
+- La comparación `col = 63` usa el valor de `col` antes del flanco. Lo mismo ocurre con `cnt = DT − 1` y con `cnt < BRIGHT` en DISPLAY.
+- El tick de LATCH sube `LAT` y carga `ROW` con r; el primer tick de DISPLAY baja `LAT` y enciende `OE`. Entre ambos no hay pulsos de `CLK`: el panel lo interpreta como latch de datos.
+- El último tick de DISPLAY apaga el panel, avanza r y decide entre seguir barriendo (SHIFT) o volver al reposo (IDLE). Cuando r pasa de 31 a 0 se cuenta un cuadro.
+- Las ramas No de las pruebas de tick conservan todos los registros. La siguiente prueba ocurre en el próximo flanco de `clk`, no al detectar un flanco de `tick`.
+
+#### Lectura previa a la arquitectura
+- **Decisiones** (candidatas al controlador): ¿hay tick?, ¿`EN`?, ¿en qué fase de la columna estamos (nivel de `CLK`)?, ¿última columna?, ¿qué se está enviando (configuración o datos)?, ¿último tick de la fila?
+- **Operaciones sobre datos** (candidatas al datapath): poner a cero e incrementar `col`, `cnt` y r; elegir el dato (patrón 1, patrón 2 o framebuffer) y cargarlo en `RGB`; cargar `ROW`; comparar `col` con 63, 53 y 52; comparar `cnt` con `DT − 1` y con `BRIGHT`; contar cuadros.
+- **Qué hay que recordar:** la columna, el par de filas, los ticks de DISPLAY, los seis bits de color y la fila mostrada (salidas registradas), el número de cuadros y la fase del proceso. La fase de la columna no necesita otro registro: la guarda el propio nivel de `CLK`.
+```
+
+
+---
 ### Referencias
 - Seengreat, RGB-Matrix-P3.0-64x64 (y variante GBR), repositorio en GitHub, organización seengreat.
 - q3k, chubby75: 5a-75b/hardware_V8.0.md (pines de la Colorlight 5A-75B).
