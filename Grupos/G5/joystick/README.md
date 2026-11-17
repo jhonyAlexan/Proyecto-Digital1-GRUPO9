@@ -6,7 +6,7 @@ Una ESP32 lee un joystick analógico de dos ejes con botón y envía las lectura
 
 ## 1. Marco teórico
 
-> **En progreso.** Listo cuando: los conceptos que el lector necesita (UART, periféricos mapeados en memoria, ADC de la ESP32) están explicados y con fuentes citadas.
+> los conceptos que el lector necesita (UART, periféricos mapeados en memoria, ADC de la ESP32) están explicados y con fuentes citadas.
 
 Esta sección sigue el camino de la información, desde el joystick hasta el procesador: cómo un joystick produce una tensión (1.1), cómo la ESP32 la convierte en un número (1.2), cómo ese número llega a la FPGA por UART (1.3), cómo la FPGA recibe una señal que no está sincronizada con su reloj (1.4) y cómo el procesador lee el resultado (1.5). Las cifras tomadas de una fuente llevan su referencia entre corchetes. Lo que calculó o dedujo el equipo se marca como *(cálculo propio)* o *(razonamiento propio)*, y los cálculos se pueden repetir con los datos del texto.
 
