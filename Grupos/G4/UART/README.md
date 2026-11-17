@@ -219,7 +219,39 @@ El diagrama no es un programa que ejecuta una caja por ciclo. Las decisiones y a
 - **Decisiones** (candidatas al controlador): ¿hay tick?, ¿`EN`?, ¿en qué fase de la columna estamos (nivel de `CLK`)?, ¿última columna?, ¿qué se está enviando (configuración o datos)?, ¿último tick de la fila?
 - **Operaciones sobre datos** (candidatas al datapath): poner a cero e incrementar `col`, `cnt` y r; elegir el dato (patrón 1, patrón 2 o framebuffer) y cargarlo en `RGB`; cargar `ROW`; comparar `col` con 63, 53 y 52; comparar `cnt` con `DT − 1` y con `BRIGHT`; contar cuadros.
 - **Qué hay que recordar:** la columna, el par de filas, los ticks de DISPLAY, los seis bits de color y la fila mostrada (salidas registradas), el número de cuadros y la fase del proceso. La fase de la columna no necesita otro registro: la guarda el propio nivel de `CLK`.
-```
+
+
+<img width="1159" height="1811" alt="fig1" src="https://github.com/user-attachments/assets/cf9a8059-7c23-49da-b41f-3bb830f01615" />
+
+Figura 6: Flujo funcional del barrido. Los rectángulos con barras laterales llaman al subflujo C. Las ramas No de las pruebas de tick esperan al siguiente ciclo de `clk`. RST conduce al reposo desde cualquier punto y Figura 7: Subflujo C, envío de 64 columnas. dato(`col`) y zona(`col`) dependen del estado que lo usa (INIT1, INIT2 o SHIFT). Cada columna consume dos ticks: uno presenta el dato y baja `CLK`; el otro sube `CLK`, momento en que el panel captura.
+
+
+<img width="1159" height="1809" alt="fig 3" src="https://github.com/user-attachments/assets/e3fcdea0-f1d9-4f51-bc03-c76aeff521a5" />
+
+Figura 9: Subflujo C clasificado. La zona de `LAT` la calcula el datapath con comparadores; el controlador decide cargarla en el registro `LAT`.
+
+#### Cómo interpretar los colores
+- **Columna, par de filas y contador de ticks.** Los registros `col`, r y `cnt`, su puesta a cero y su incremento son del datapath. El controlador los habilita, pero solo recibe condiciones de un bit: `last_col`, `last_cnt`, `oe_on` y las zonas.
+- **Dato de color.** Elegir entre patrón 1, patrón 2 y framebuffer, y cargar `RGB`, es del datapath. La FSM solo indica la fuente (`rgb_sel`) y cuándo cargar (`load_rgb`).
+- **Fila mostrada.** Cargar `ROW` con r es una transferencia del datapath ordenada en LATCH.
+- **Líneas de control del panel.** `CLK`, `LAT` y `OE` son salidas registradas del controlador, como `tx_done` en la UART.
+- **Espera y secuencia.** Las pruebas de tick, de `EN`, de fase y los cambios de estado pertenecen al controlador. El generador de ticks es un bloque independiente.
+- **Cuadros.** El contador `frame` es del datapath; se incrementa con la misma orden que avanza r, solo cuando r = 31.
+- **Reset y conectores.** RST va en gris porque afecta a ambos bloques. A, B y C son elementos de lectura, no componentes.
+
+> Uso de IA: el texto de las secciones 4 y 6 se elaboró con ayuda de un asistente de IA (Claude) a partir del diseño del grupo. Los dibujos del flujo y de su clasificación son propios.
+
+
+Qué va en cada color (compáralo con las figuras 3 y 4 del PDF):
+
+| Verde (datapath) | Amarillo (control) |
+|---|---|
+| `col ← 0`, `col ← col + 1`, `col = 63` (dentro del rombo) | IDLE `OE ← 1`, rombos de `tick` y de `EN` |
+| `RGB ← dato(col)`, `zona(col)` | `LAT ← …`, `CLK ← 0`, `CLK ← 1`, rombo `CLK = 1?` |
+| `ROW ← r`, `cnt ← 0`, `cnt ← cnt + 1` | `LAT ← 1`, `LAT ← 0`, `OE ← no(…)`, `OE ← 1` |
+| `cnt = DT − 1`, `cnt < BRIGHT` (dentro del rombo o del paréntesis) | Rombo `cnt = DT − 1?` como decisión |
+| `r ← r + 1`, `frame ← frame + 1 si r = 31` | Rombo `EN = 1?` del final |
+
 
 
 ---
@@ -228,3 +260,4 @@ El diagrama no es un programa que ejecuta una caja por ciclo. Las decisiones y a
 - q3k, chubby75: 5a-75b/hardware_V8.0.md (pines de la Colorlight 5A-75B).
 - LiteX Boards: litex_boards/platforms/colorlight_5a_75b.py.
 - C. Ababei, FSM, ASM, FSMD, ASMD, Lecture 4, Marquette University.
+```
