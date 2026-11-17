@@ -325,12 +325,33 @@ Los valores se aplican en la siguiente muestra. Escribirlos mientras suena es se
 - Configuración física de SD y GAIN.
 - ASMD, tabla de transferencias, bloques (control y datapath) y RTL del transmisor I2S.
  
-
 ## 3. Etapa de diseño
 
 ### 3.1 Diagrama de caja negra
 
-> **Pendiente.** Listo cuando: todas las entradas y salidas tienen nombre, sin mostrar nada del interior.
+El Diagrama de caja Negra representa la interfaz externa del módulo `peripheral_audio`. Este módulo actúa como intermediario entre el procesador, del cual recibe parámetros de configuración mediante escrituras en memoria, y el amplificador externo (MAX98357A), al que envía las tramas de audio digital para luego ser reproducidas en el parlante.
+
+![Diagrama de caja negra del periférico de audio](diagramas/caja_negra.png)
+
+#### Señales de entrada (Bus del sistema y Control)
+
+Estas señales provienen del adaptador del bus del procesador e integran al módulo dentro del mapa de memoria (MMIO):
+
+- **HCLK (Reloj del sistema):** Señal de reloj principal (típicamente 25 MHz o 27 MHz) que sincroniza la lógica interna y de la cual se derivan todas las frecuencias del bus de salida.
+- **Reset:** Señal de reinicio síncrono activo alto. Su activación lleva al módulo a un estado de reposo, forzando las salidas a cero.
+- **cs (Chip Select):** Habilitador del periférico, activado por el bus cuando el procesador direcciona la región de memoria asignada al módulo de audio.
+- **wr (Write Enable):** Señal de control que valida la operación de escritura, indicando que el dato presente en el bus debe ser capturado.
+- **addr (Dirección):** Bus de desplazamiento (*offset*) que direcciona de forma unívoca el registro de configuración objetivo (`FREQ`, `VOL` o `CONTROL`).
+- **d_in (Dato de entrada):** Bus de datos por el cual el procesador envía el valor a almacenar en el registro previamente direccionado.
+
+#### Señales de salida (Bus I2S y Respuesta)
+
+Estas señales conforman la interfaz de comunicación hacia el convertidor DAC/amplificador externo, además de la señal de confirmación hacia el procesador:
+
+- **audio_bclk (Reloj de bit):** Señal BCLK (781,25 kHz) que sincroniza temporalmente la transmisión y lectura de cada bit individual en la línea de datos.
+- **audio_lrclk (Reloj de trama):** Señal LRCLK (24,414 kHz) que determina la frecuencia de muestreo y selecciona el canal de la ranura actual (0 para el canal izquierdo, 1 para el derecho).
+- **audio_din (Datos en serie):** Señal DIN por la cual se transmiten las muestras de audio codificadas en complemento a dos, enviando siempre el bit más significativo (MSB) primero, con el desfase característico del protocolo I2S.
+- **ack (Acuse de recibo):** Señal de confirmación (`acknowledge`) enviada de vuelta al bus Wishbone/MMIO para validar que el ciclo de escritura ha concluido exitosamente.
 
 ### 3.2 Características de la interfaz
 
