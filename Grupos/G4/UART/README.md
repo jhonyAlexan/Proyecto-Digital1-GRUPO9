@@ -274,8 +274,6 @@ Cómo simular (Icarus Verilog y GTKWave), desde `Grupos/G4/`:
     make wave-core    # abre la simulación del core en GTKWave
     make clean
 
-> Uso de IA: el RTL se escribió con ayuda de un asistente de IA (Claude) a partir de los diagramas del grupo (bloques, ASMD, tabla de transferencias y FSM). Lo revisé contra esos diagramas.
-
 ---
 ### Referencias
 - Guía del curso: UART 8N1, control combinacional y actualización conjunta en subida, e integración con FemtoRV32 Quark (uart-riscv.pdf).
