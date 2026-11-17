@@ -16,13 +16,13 @@ Conectar la IMU directamente a los pines de 3.3V de la Tang Nano 9K:
 | **SDO / SAO** | `Pin 27` | `miso` | Datos de IMU hacia FPGA |
 | **CS / CSB** | `Pin 28` | `cs_n` | Chip Select (activo en bajo) |
 
-### Salidas de control y depuración
+### Salidas de control 
 * **Pin 29 (`golpe_out`):** Salida digital de 3.3V. Se mantiene en `1` durante **150 ms** cuando detecta un golpe y vuelve a `0`.
 * **Pin 17 (`uart_tx`):** Salida serial a **115200 baudios** (conectada al USB-UART de la placa).
 * **LEDs integrados:** Se encienden todos simultáneamente como indicador visual cada vez que `golpe_out = 1`.
 
 
-## 2. CProbarlo usando la Suite usada en el curso
+## 2. Probarlo usando la Suite usada en el curso
 
 Con **OSS CAD Suite** activado en Linux, ejecutar dentro de la carpeta raíz:
 
