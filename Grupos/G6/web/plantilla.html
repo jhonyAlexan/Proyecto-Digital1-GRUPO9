@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pelea beta</title>
+<style>
+:root {
+  --bg: #15181d;
+  --panel: #1d2128;
+  --linea: #2e343e;
+  --texto: #e3e6ea;
+  --tenue: #8a93a0;
+  --j1: #4d8dff;
+  --j2: #ff5a4f;
+  --acento: #f2b33d;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--texto); margin: 0; }
+body {
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 20px 16px 32px;
+}
+main { max-width: 640px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font: 600 20px var(--mono); margin: 0; letter-spacing: .04em; }
+h1 span { color: var(--acento); }
+canvas { width: 100%; aspect-ratio: 1; display: block; background: #000; border: 1px solid var(--linea); border-radius: 6px; }
+.fila { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 13px; color: var(--tenue); }
+.fila b { color: var(--texto); font-family: var(--mono); font-weight: 500; }
+.trama { font-family: var(--mono); font-size: 13px; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; background: var(--panel); border: 1px solid var(--linea); border-radius: 6px; padding: 10px 12px; overflow-x: auto; }
+.trama span:nth-child(1) { color: var(--j1); }
+.trama span:nth-child(3) { color: var(--j2); }
+button { font: inherit; color: var(--texto); background: var(--panel); border: 1px solid var(--linea); border-radius: 5px; padding: 4px 10px; cursor: pointer; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--texto); }
+</style>
+</head>
+<body>
+<main>
+  <h1>PELEA <span>beta</span></h1>
+  <canvas id="panel" width="640" height="640"></canvas>
+  <div class="fila">
+    <span>Estado: <b id="estado">INICIO</b></span>
+    <button id="sonido">Sonido</button>
+  </div>
+  <div class="trama">
+    <span>J1</span><span id="t1">--</span>
+    <span>J2</span><span id="t2">--</span>
+  </div>
+  <div class="fila">
+    <span>Saca al rival de la isla: cada golpe le sube el daño y lo empuja más lejos. Gana quien le quite las 3 vidas.</span>
+    <span>Mientras el mando se mueve, golpea. El botón cubre con el escudo. Al final: botón = revancha, mantener 2 s = inicio.</span>
+  </div>
+  <div class="fila">
+    <span>J1: <kbd>A D</kbd> mover, <kbd>W</kbd> saltar (doble), <kbd>G</kbd> mover el mando (golpe), <kbd>F</kbd> botón (escudo)</span>
+    <span>J2: <kbd>← →</kbd> mover, <kbd>↑</kbd> saltar (doble), <kbd>L</kbd> mover el mando (golpe), <kbd>K</kbd> botón (escudo)</span>
+  </div>
+</main>
+
+<script>
+const WASM = "__WASM__";
+const ESTADOS = ['INICIO', 'JUGANDO', 'FIN'];
+const teclas = {
+  KeyA: [0, 'izq'], KeyD: [0, 'der'], KeyW: [0, 'arriba'], KeyF: [0, 'boton'], KeyG: [0, 'giro'],
+  ArrowLeft: [1, 'izq'], ArrowRight: [1, 'der'], ArrowUp: [1, 'arriba'], KeyK: [1, 'boton'], KeyL: [1, 'giro']
+};
+const ctl = [{}, {}];
+const seq = [0, 0];
+let w, audio = null;
+
+addEventListener('keydown', e => {
+  const t = teclas[e.code];
+  if (!t) return;
+  e.preventDefault();
+  ctl[t[0]][t[1]] = true;
+});
+addEventListener('keyup', e => {
+  const t = teclas[e.code];
+  if (t) ctl[t[0]][t[1]] = false;
+});
+
+// una trama de 8 bytes por control cada 33 ms
+function enviar() {
+  for (let j = 0; j < 2; j++) {
+    const c = ctl[j];
+    const x = c.der ? 127 : c.izq ? -127 : 0;
+    const y = c.arriba ? 127 : 0;
+    const p = [0xAA, j + 1, seq[j]++ & 255, x & 255, y & 255, c.boton ? 1 : 0, c.giro ? 1 : 0];
+    p.push(p[1] ^ p[2] ^ p[3] ^ p[4] ^ p[5] ^ p[6]);
+    p.forEach(b => w.byte(b));
+    document.getElementById('t' + (j + 1)).textContent = p.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+  }
+}
+
+// sonidos de prueba (el de verdad lo hace el grupo morado)
+const tonos = { 1: [660, .1], 4: [150, .08], 8: [90, .4], 9: [520, .5] };
+function sonar(codigo) {
+  if (!audio || !tonos[codigo]) return;
+  const [f, d] = tonos[codigo], o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'square'; o.frequency.value = f;
+  g.gain.setValueAtTime(.08, audio.currentTime);
+  g.gain.exponentialRampToValueAtTime(.001, audio.currentTime + d);
+  o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + d);
+}
+document.getElementById('sonido').onclick = () => {
+  try { audio = audio || new AudioContext(); audio.resume(); } catch (e) {}
+};
+
+const cv = document.getElementById('panel').getContext('2d');
+// los 8 colores de la pantalla del G4: {R,G,B}
+const COLORES = ['#000000', '#2a5cff', '#22d24a', '#22dede', '#ff3434', '#e044e0', '#ffd426', '#ffffff'];
+function dibujar() {
+  const leds = new Uint8Array(w.memory.buffer, w.leds(), 4096);
+  cv.fillStyle = '#000';
+  cv.fillRect(0, 0, 640, 640);
+  for (let i = 0; i < 4096; i++) {
+    const v = leds[i];
+    cv.fillStyle = v ? COLORES[v & 7] : '#0c0e11';
+    cv.beginPath();
+    cv.arc((i & 63) * 10 + 5, (i >> 6) * 10 + 5, 3.9, 0, 6.3);
+    cv.fill();
+  }
+  document.getElementById('estado').textContent = ESTADOS[w.estado()];
+}
+
+// 60 cuadros por segundo
+let acumulado = 0, antes = 0;
+function bucle(t) {
+  acumulado += Math.min(t - antes, 200);
+  antes = t;
+  while (acumulado >= 1000 / 60) {
+    sonar(w.cuadro(0));
+    acumulado -= 1000 / 60;
+  }
+  dibujar();
+  requestAnimationFrame(bucle);
+}
+
+WebAssembly.instantiate(Uint8Array.from(atob(WASM), c => c.charCodeAt(0))).then(r => {
+  w = r.instance.exports;
+  w.iniciar();
+  setInterval(enviar, 33);
+  requestAnimationFrame(t => { antes = t; requestAnimationFrame(bucle); });
+});
+</script>
+</body>
+</html>
