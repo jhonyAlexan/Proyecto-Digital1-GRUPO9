@@ -147,6 +147,13 @@ Estas reglas se formalizan en el diagrama de flujo, el ASMD y la máquina de est
 
 El flujo desarrolla la secuencia del análisis temporal sin cambiar su temporización. Se lee primero la columna izquierda y después la derecha, siguiendo los conectores A; el conector B devuelve al reposo. Las tres operaciones de envío por columnas (dos palabras de configuración y una fila de datos) comparten el mismo procedimiento, que se dibuja una sola vez como subflujo C.
 
+![Flujo del barrido](img/flujo_g4.png)
+
+Figura 6: Flujo funcional del barrido. Los rectángulos con barras laterales llaman al subflujo C. Las ramas No de las pruebas de tick esperan al siguiente ciclo de `clk`. RST conduce al reposo desde cualquier punto.
+
+![Subflujo C](img/subflujo_g4.png)
+
+Figura 7: Subflujo C, envío de 64 columnas. dato(`col`) y zona(`col`) dependen del estado que lo usa (INIT1, INIT2 o SHIFT). Cada columna consume dos ticks: uno presenta el dato y baja `CLK`; el otro sube `CLK`, momento en que el panel captura.
 
 #### Interpretación síncrona del flujo
 El diagrama no es un programa que ejecuta una caja por ciclo. Las decisiones y acciones de un recorrido pertenecen al mismo flanco de subida de `clk` con `tick = 1`:
@@ -162,13 +169,15 @@ El diagrama no es un programa que ejecuta una caja por ciclo. Las decisiones y a
 - **Operaciones sobre datos** (candidatas al datapath): poner a cero e incrementar `col`, `cnt` y r; elegir el dato (patrón 1, patrón 2 o framebuffer) y cargarlo en `RGB`; cargar `ROW`; comparar `col` con 63, 53 y 52; comparar `cnt` con `DT − 1` y con `BRIGHT`; contar cuadros.
 - **Qué hay que recordar:** la columna, el par de filas, los ticks de DISPLAY, los seis bits de color y la fila mostrada (salidas registradas), el número de cuadros y la fase del proceso. La fase de la columna no necesita otro registro: la guarda el propio nivel de `CLK`.
 
+### 6. Clasificación del flujo: control y datapath
 
-<img width="1159" height="1811" alt="fig1" src="https://github.com/user-attachments/assets/cf9a8059-7c23-49da-b41f-3bb830f01615" />
+Las figuras repiten el flujo y el subflujo C con colores: verde para operaciones del datapath y amarillo para funciones del controlador.
 
-Figura 6: Flujo funcional del barrido. Los rectángulos con barras laterales llaman al subflujo C. Las ramas No de las pruebas de tick esperan al siguiente ciclo de `clk`. RST conduce al reposo desde cualquier punto y Figura 7: Subflujo C, envío de 64 columnas. dato(`col`) y zona(`col`) dependen del estado que lo usa (INIT1, INIT2 o SHIFT). Cada columna consume dos ticks: uno presenta el dato y baja `CLK`; el otro sube `CLK`, momento en que el panel captura.
+![Flujo clasificado](img/flujo_color_g4.png)
 
+Figura 8: Flujo del barrido clasificado por responsabilidad. Las cajas mixtas distinguen operaciones de datos y acciones de control. Los resultados `cnt = DT − 1` y `cnt < BRIGHT` se calculan en el datapath (verde), pero la decisión de qué rama seguir pertenece al controlador (rombo amarillo).
 
-<img width="1159" height="1809" alt="fig 3" src="https://github.com/user-attachments/assets/e3fcdea0-f1d9-4f51-bc03-c76aeff521a5" />
+![Subflujo C clasificado](img/subflujo_color_g4.png)
 
 Figura 9: Subflujo C clasificado. La zona de `LAT` la calcula el datapath con comparadores; el controlador decide cargarla en el registro `LAT`.
 
@@ -181,23 +190,12 @@ Figura 9: Subflujo C clasificado. La zona de `LAT` la calcula el datapath con co
 - **Cuadros.** El contador `frame` es del datapath; se incrementa con la misma orden que avanza r, solo cuando r = 31.
 - **Reset y conectores.** RST va en gris porque afecta a ambos bloques. A, B y C son elementos de lectura, no componentes.
 
-> Uso de IA: el texto de las secciones 4 y 6 se elaboró con ayuda de un asistente de IA (Claude) a partir del diseño del grupo. Los dibujos del flujo y de su clasificación son propios.
-
-
-Qué va en cada color (compáralo con las figuras 3 y 4 del PDF):
-
-| Verde (datapath) | Amarillo (control) |
-|---|---|
-| `col ← 0`, `col ← col + 1`, `col = 63` (dentro del rombo) | IDLE `OE ← 1`, rombos de `tick` y de `EN` |
-| `RGB ← dato(col)`, `zona(col)` | `LAT ← …`, `CLK ← 0`, `CLK ← 1`, rombo `CLK = 1?` |
-| `ROW ← r`, `cnt ← 0`, `cnt ← cnt + 1` | `LAT ← 1`, `LAT ← 0`, `OE ← no(…)`, `OE ← 1` |
-| `cnt = DT − 1`, `cnt < BRIGHT` (dentro del rombo o del paréntesis) | Rombo `cnt = DT − 1?` como decisión |
-| `r ← r + 1`, `frame ← frame + 1 si r = 31` | Rombo `EN = 1?` del final |
+> Uso de IA: el texto y las figuras 6 a 9 de las secciones 4 y 6 se elaboraron con ayuda de un asistente de IA (Claude) a partir del diseño del grupo.
 
 
 ### 7. ASMD: del flujo a las transferencias por ciclo
 
-![ASMD del barrido](asmd_g4.png)
+![ASMD del barrido](img/asmd_g4.png)
 
 
 Figura 10: ASMD del barrido. Cada recinto punteado es un bloque ASM asociado a un estado. Los rectángulos amarillos son estados con sus salidas; los rombos evalúan condiciones; las cajas redondeadas son transferencias condicionales, con fondo verde para operaciones de datos y amarillo para acciones de control. Los conectores (I, 1, 2, S, L, D) nombran el próximo estado. El superíndice ⁺ denota el valor que se carga en el próximo flanco de subida. T1 a T8 corresponden a las filas de la tabla de transferencias.
@@ -208,7 +206,9 @@ Lectura de la figura:
 - `last_col = (col = 63)`, `last_cnt = (cnt = DT − 1)` y `oe_on = (cnt < BRIGHT)` se calculan en el datapath con los valores anteriores al flanco. La decisión de qué rama seguir es del controlador.
 - En DISPLAY, T7 y T8 hacen las mismas transferencias; solo cambia el próximo estado según `EN`.
 
-> Uso de IA: la figura 10 se generó con ayuda de un asistente de IA (Claude) a partir del diseño del grupo y se comprobó contra la tabla de transferencias y la simulación del controlador.
+La caja de DISPLAY indica que `OE` vale 0 durante los primeros `BRIGHT` ticks de la fila (corrección pedida en la Entrega 3).
+
+> Uso de IA: la figura 10 se generó con ayuda de un asistente de IA (Claude) a partir del diseño del grupo y se comprobó contra la tabla de transferencias.
 
 
 El ASMD organiza el barrido en bloques asociados a los estados y fija qué se carga en el próximo flanco de subida de `clk`. Los estados que envían columnas (INIT1, INIT2 y SHIFT) tienen el mismo bloque, que se llama *S*, y solo cambian tres parámetros:
@@ -250,6 +250,33 @@ Observaciones:
 - En T4 al salir de INIT1 o INIT2, `LAT` sigue en 1 y baja en el primer T2 del estado siguiente (la columna 0 está fuera de la zona). Así el driver cuenta 11 o 12 pulsos.
 - En T6, si `BRIGHT >= DT`, el panel queda encendido `DT − 1` ticks: el último tick (T7 o T8) siempre lo apaga.
 - Si `EN` baja y vuelve a subir antes del último tick de una fila, se sigue barriendo sin reconfigurar el panel. La configuración solo se repite al salir de IDLE.
+
+
+### 9. Máquina de estados del controlador
+
+![FSM del barrido](img/fsm_g4.png)
+
+Figura 12: Control del barrido con seis estados. Todas las transiciones ocurren en flancos de subida de `clk`; `tick` se comprueba como habilitación en nivel alto. Las etiquetas siguen la convención *condición / acción* y usan los nombres de la tabla de transferencias (T1 a T8, H1, H2). El ASMD agrupa INIT1, INIT2 y SHIFT en un bloque parametrizado; aquí se separan porque el registro de estado necesita distinguirlos.
+
+| Estado | `OE` | Función | Sale con |
+|---|---|---|---|
+| IDLE | 1 | Panel apagado; espera `tick ∧ EN` | T1 → INIT1 |
+| INIT1 | 1 | Palabra del registro 1 del driver: 64 pulsos, `LAT` en los 11 últimos | T4 → INIT2 |
+| INIT2 | 1 | Palabra del registro 2: 64 pulsos, `LAT` en los 12 últimos | T4 → SHIFT |
+| SHIFT | 1 | 64 columnas del par de filas r y r + 32 desde el framebuffer | T4 → LATCH |
+| LATCH | 1 | Un tick: sube `LAT` y carga `ROW` con r | T5 → DISPLAY |
+| DISPLAY | 0 durante `BRIGHT` ticks | Muestra la fila `DT` ticks; el último apaga el panel y avanza r | T7 → SHIFT, T8 → IDLE |
+
+Codificación: 3 bits (IDLE = 0, INIT1 = 1, INIT2 = 2, SHIFT = 3, LATCH = 4, DISPLAY = 5). `BUSY` del registro `STATUS` es `estado ≠ IDLE`.
+
+#### Reglas del control
+- `OE` solo vale 0 en DISPLAY: nunca hay pulsos de `CLK`, `LAT` alto ni cambio de `ROW` con el panel encendido.
+- `CLK`, `LAT` y `OE` son salidas registradas: cambian justo después del flanco de la transición, sin ciclo extra y sin transitorios en los pines.
+- El nivel de `CLK` indica la fase de la columna (presentar o capturar); no hace falta otro estado ni una bandera.
+- Bajar `EN` no corta la fila en curso: la decisión se toma en el último tick de DISPLAY (T7 o T8). Subir `EN` desde IDLE repite la configuración del driver.
+- El barrido es autónomo: el procesador solo escribe registros y el framebuffer.
+
+> Uso de IA: la figura 12 y el texto de la sección 9 se elaboraron con ayuda de un asistente de IA (Claude) a partir del ASMD y de la tabla de transferencias.
 
 
 ### 11. RTL y verificación
