@@ -1,12 +1,10 @@
-mkdir -p sim
-cat << 'EOF' > sim/tb_imu.v
-`timescale 1ns / 1ps
-
+python3 -c '
+tb = """`timescale 1ns / 1ps
 module tb_imu;
     reg clk = 0;
     reg rst_n = 0;
     reg start = 0;
-    reg [15:0] tx_data = 16'h8000;
+    reg [15:0] tx_data = 16'\''h8000;
     wire [7:0] rx_data;
     wire done;
     wire sclk, mosi, cs_n;
@@ -21,7 +19,7 @@ module tb_imu;
 
     always #18.5 clk = ~clk;
 
-    reg [7:0] resp_sensor = 8'hD1;
+    reg [7:0] resp_sensor = 8'\''hD1;
     integer i;
 
     initial begin
@@ -44,5 +42,6 @@ module tb_imu;
         $finish;
     end
 endmodule
-EOF
-
+"""
+open("tb_imu.v", "w").write(tb)
+'
