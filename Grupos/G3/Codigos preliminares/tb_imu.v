@@ -1,4 +1,3 @@
-python3 -c '
 tb = """`timescale 1ns / 1ps
 module tb_imu;
     reg clk = 0;
