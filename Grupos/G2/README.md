@@ -29,14 +29,14 @@ Los $26$ bloques BSRAM ($58.5\text{ KB}$) disponibles en la Gowin GW1NR-9 quedan
 
 ### 2.1 Acuerdos de Integración entre Subgrupos
 
-Para que todos los módulos del proyecto encajen sin problemas de sincronización ni direcciones cruzadas, acordamos los siguientes puntos con los demás subgrupos:
+Para que todos los módulos del proyecto encajen sin problemas de sincronización ni direcciones cruzadas, se tuvo en cuenta los siguientes puntos:
 
 - **Reloj maestro único ($27\text{ MHz}$):** Todo el SoC dentro de la FPGA corre de forma síncrona con el oscilador base de $27\text{ MHz}$ ($T_{\text{clk}} \approx 37.04\text{ ns}$). Así evitamos cruces de dominios de reloj (CDC) entre el CPU, las memorias y los periféricos.
 - **Bus estándar del curso:** Todos los periféricos usan la interfaz síncrona acordada (`clk`, `rst`, `cs`, `addr`, `rd`, `wr`, `d_in`, `d_out`).
 - **Alineación con G4 (Pantalla HUB75):** El framebuffer se organiza en **2 bancos de $2048 \times 3$ bits** (RGB de $3$ bits = $8$ colores, $1.5\text{ KB}$ en total) y se sincroniza con la bandera **`FRAME`** del registro `hub75_csr`, descartando el doble búfer de $16\text{ KB}$ que habíamos planteado al inicio.
-- **Alineación con G1, G3 y G5 (Controles y Audio):** Los datos del mando inalámbrico (Joystick analógico + IMU `BMI160` por SPI en la FPGA del mando) llegan por UART $\rightarrow$ Bluetooth (ESP32) hasta el receptor UART de la consola, mientras que el audio sale por un módulo PWM mapeado en memoria.
-- **Recursos de juego (G6):** Las memorias guardan activos genéricos para juegos arcade retro simples (*sprites* 2D, mapas, fuentes y puntajes máximos), dejando la lógica específica a cargo de G6.
-
+- **Alineación con G1, G3 y G5 (Controles y Audio):** Los datos del mando inalámbrico (Joystick analógico + IMU `BMI160` por SPI en la FPGA del mando) llegan por UART $\rightarrow$ Bluetooth (ESP32) hasta el receptor UART de la consola. **El audio se procesa mediante el protocolo I2S hacia un módulo DAC MAX98357A**.
+- **Recursos de juego (G6):** Las memorias guardan activos genéricos para juegos arcade retro simples (*sprites* 2D, mapas, fuentes y puntajes máximos).
+  
 ### 2.2 Mapa de Memoria Unificado del SoC (FemtoRV32)
 
 Los periféricos se seleccionan mediante los bits superiores de la dirección (`mem_addr[31:16]`), permitiendo un mapeo limpio del `chip_select`.
