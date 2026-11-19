@@ -337,7 +337,29 @@ Actualmente se dispone de un programa inicial para la adquisición de los valore
 
 ### 3.3 Diagrama de bloques
 
-> **Pendiente.** Listo cuando: cada bloque interno tiene su función y las señales usan los mismos nombres que en Verilog.
+
+El diagrama de bloques representa la organización interna propuesta del periférico joystick y el recorrido de los datos desde la ESP32 hasta el procesador femtoRV32.
+
+![Diagrama de bloques del joystick](diagramas/joystick_diagrama_bloques.svg)
+
+El diseño se divide en los siguientes bloques funcionales:
+
+| Bloque | Función |
+|---|---|
+| Sincronizador | Sincroniza la señal `uart_rx` con el reloj `clk` de la FPGA mediante dos flip-flops. |
+| Receptor UART | Recibe los datos mediante UART 8N1 a 115200 baudios. Entrega `rx_data[7:0]`, `rx_valid` y `rx_frame_err`. |
+| Ensamblador de paquetes | Recibe los bytes y organiza la trama de 8 bytes definida en la sección 3.2. |
+| Validador | Comprueba el byte de inicio `0xAA`, el identificador del jugador y el checksum XOR antes de aceptar los datos. |
+| Banco de registros | Almacena los datos válidos en `JOY1_DATA` y `JOY2_DATA`, junto con los indicadores del registro `STATUS`. |
+| Interfaz MMIO | Decodifica `cs`, `addr[31:0]` y `rd`, y entrega al procesador el registro seleccionado por `d_out[31:0]`. |
+
+Todos los bloques internos trabajan con el reloj `clk` y el reinicio `rst` del sistema. Para las pruebas en la Tang Nano 9K se contempla una frecuencia de 27 MHz.
+
+La información recibida se almacena únicamente después de validar el paquete completo. Cuando se detecta un error de recepción, se conservan los últimos datos correctos y se actualiza el indicador de error correspondiente.
+
+El procesador femtoRV32 consulta los valores del joystick mediante operaciones de lectura de los registros mapeados en memoria, sin intervenir directamente en la recepción serial.
+
+Esta arquitectura constituye una propuesta de diseño. Los bloques y sus conexiones se implementarán y verificarán durante las etapas de descripción en Verilog y simulación.
 
 ### 3.4 Diagrama de flujo
 
