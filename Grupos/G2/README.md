@@ -39,15 +39,16 @@ Para que todos los módulos del proyecto encajen sin problemas de sincronizació
 
 ### 2.2 Mapa de Memoria Unificado del SoC (FemtoRV32)
 
+Los periféricos se seleccionan mediante los bits superiores de la dirección (`mem_addr[31:16]`), permitiendo un mapeo limpio del `chip_select`.
+
 | Rango de Direcciones | Tamaño | Subgrupo | Periférico / Región | Descripción de Acceso |
 | :--- | :---: | :---: | :--- | :--- |
 | `0x0000_0000` – `0x0000_7FFF` | $32\text{ KB}$ | **G2 / G6** | `BRAM_PROG_DATA` | Memoria principal de instrucciones y datos del FemtoRV32 (`.text`, `.data`, `.bss`, *stack*). |
-| `0x1000_0000` – `0x1000_0010` | $20\text{ B}$ | **G4** | `HUB75_CSR` | Registros de control y estado del panel LED $64 \times 64$ (incluye bandera `FRAME` para sincronismo). |
-| `0x1000_0100` – `0x1000_010C` | $16\text{ B}$ | **G2** | `SPI_FLASH_CTRL` | Registros MMIO del controlador Flash SPI `W25Q64JV` (`CTRL_STAT`, `CMD_ADDR`, `TX_DATA`, `RX_DATA`). |
-| `0x1000_0200` – `0x1000_020C` | $16\text{ B}$ | **G1 / G3 / G5** | `UART_INPUT_RX` | Receptor de tramas del mando inalámbrico (ejes del joystick, pulsadores y lecturas del `BMI160`). |
-| `0x1000_0300` – `0x1000_0304` | $8\text{ B}$ | **G5** | `AUDIO_PWM` | Control de frecuencia y ciclo útil del generador de efectos sonoros por PWM. |
+| `0x0040_0000` – `0x0040_0010` | $20\text{ B}$ | **G4** | `HUB75_CSR` | Registros de control y estado del panel LED $64 \times 64$ (incluye bandera `FRAME` para sincronismo). |
+| `0x0041_0000` – `0x0041_000C` | $16\text{ B}$ | **G2** | `SPI_FLASH_CTRL` | Registros MMIO del controlador Flash SPI `W25Q64JV` (`CTRL_STAT`, `CMD_ADDR`, `TX_DATA`, `RX_DATA`). |
+| `0x0042_0000` – `0x0042_000C` | $16\text{ B}$ | **G1 / G3** | `UART_INPUT_RX` | Receptor de tramas del mando inalámbrico (ejes del joystick, pulsadores y lecturas del `BMI160`). |
+| `0x0043_0000` – `0x0043_000C` | $16\text{ B}$ | **G5** | `AUDIO_I2S_CTRL` | Registros `FREQ`, `VOL` y `CONTROL` para el generador de audio I2S (MAX98357A). |
 | `0x2000_0000` – `0x2000_3FFF` | $16\text{ KB}$ (espacio) / $1.5\text{ KB}$ (físico) | **G2 / G4** | `FRAMEBUFFER_BRAM` | Escritura lineal de $4,096$ píxeles ($1$ palabra/píxel, `d_in[2:0] = {R,G,B}`) repartidos en dos bancos de $2048 \times 3$ bits. |
-
 ### 2.3 Flujo Completo del Envío de Datos al Juego
 
 En el siguiente diagrama se muestra cómo viajan los datos desde la memoria Flash hasta el panel LED, separando lo que corre en hardware (Verilog) y lo que ejecuta el FemtoRV32 en C:
