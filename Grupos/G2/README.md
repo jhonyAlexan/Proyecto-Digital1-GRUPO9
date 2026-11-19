@@ -87,7 +87,7 @@ En lugar de dibujar solo el pinout de la memoria Flash, la caja negra representa
 | :--- | :---: | :---: | :--- | :--- |
 | `clk` | Entrada | $1$ bit | Bus SoC | Reloj maestro del sistema ($27\text{ MHz}$). |
 | `rst` | Entrada | $1$ bit | Bus SoC | Reinicio síncrono activo en alto (`1` lleva la FSM y el datapath a `IDLE`). |
-| `cs` | Entrada | $1$ bit | Bus SoC | Selección de periférico activada por el decodificador MMIO (`0x1000_0100`). |
+| `cs` | Entrada | $1$ bit | Bus SoC | Selección de periférico activada por el decodificador MMIO para la región `0x0041_xxxx`. |
 | `addr` | Entrada | $4$ bits | Bus SoC | *Offset* de dirección interna para seleccionar los registros del controlador. |
 | `rd` | Entrada | $1$ bit | Bus SoC | Habilitación de lectura desde el procesador FemtoRV32. |
 | `wr` | Entrada | $1$ bit | Bus SoC | Habilitación de escritura desde el procesador FemtoRV32. |
@@ -106,7 +106,7 @@ Dividimos el controlador en cuatro bloques síncronos gobernados por el reloj ú
 
 ![Diagrama de Bloques Control y Datapath del Controlador SPI](img/bloques_control_datapath_spi_g2.png)
 
-#### Mapa de Registros Internos (`spi_mmio_regs` — Base `0x1000_0100`)
+#### Mapa de Registros Internos (`spi_mmio_regs` — Base `0x0041_0000`)
 
 | Offset | Nombre | Acceso | Campos de Bits | Descripción Funcional |
 | :---: | :--- | :---: | :--- | :--- |
