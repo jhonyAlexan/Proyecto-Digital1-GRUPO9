@@ -4,6 +4,8 @@ Grupo 3: Kennet, Jeimy, Alexander.
 Còdigo en Verilog para leer aceleración y velocidad angular desde una IMU **BMI160** mediante protocolo SPI (Modo 0) en una FPGA **Tang Nano 9K**, la idea es que el sistema calcule la intensidad del movimiento en tiempo real y entrega una señal digital (`1` o `0`) ante golpes o giros bruscos.
 La direcciòn del golpe o giro es indiferente.
 
+Se analizó el diagrama de flujo del protocolo SPI para enviar una trama de 6 bytes con el profesor, luego se hizo uso de la IA como apoyo para la generación del código en verilog, se debe verificar su consistencia y funcionamiento.
+
 ## Estructura del Proyecto y Ubicación de Archivos
 
 Los archivos se organizan asi:
