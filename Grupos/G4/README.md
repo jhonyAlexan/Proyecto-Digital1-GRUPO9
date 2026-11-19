@@ -251,6 +251,38 @@ Observaciones:
 - En T6, si `BRIGHT >= DT`, el panel queda encendido `DT − 1` ticks: el último tick (T7 o T8) siempre lo apaga.
 - Si `EN` baja y vuelve a subir antes del último tick de una fila, se sigue barriendo sin reconfigurar el panel. La configuración solo se repite al salir de IDLE.
 
+### 8. Bloques del barrido: control y datapath
+
+A partir de la tabla de transferencias, el barrido se separa en un controlador y un datapath. El generador de ticks, el framebuffer y los registros del bus quedan fuera de estos dos bloques.
+
+#### Recursos del datapath
+- Contador `col[5:0]`: mantener, poner a cero o incrementar. Junto con r forma la dirección de lectura `fb_raddr[10:0] = {r, col}`.
+- Contador `r[4:0]`: mantener o incrementar; pasa de 31 a 0 por desborde natural.
+- Contador `cnt`: mantener, poner a cero o incrementar; ancho ⌈log₂ DT⌉ (10 bits para DT = 1024).
+- Comparadores: `last_col` (`col = 63`), `lat_zone1` (`col ≥ 53`), `lat_zone2` (`col ≥ 52`), `last_cnt` (`cnt = DT − 1`) y `oe_on` (`cnt < BRIGHT`).
+- Multiplexor 3:1 de 6 bits: patrón 1 replicado, patrón 2 replicado o `{top_q, bot_q}` del framebuffer. Los patrones usan `col[3:0]`, es decir, `col mod 16`, sin divisor.
+- Registros `RGB[5:0]` (carga con `load_rgb`) y `ROW[4:0]` (carga con `load_row`).
+- Contador `frame[31:0]`: se incrementa con `inc_row` cuando r = 31.
+
+#### Órdenes y condiciones entre bloques
+
+| Señal | Bits | Efecto en el próximo flanco | Transferencia |
+|---|---|---|---|
+| `clear_col` | 1 | `col ← 0` (prioridad sobre `inc_col`) | T1, T4 |
+| `inc_col` | 1 | `col ← col + 1` | T3 |
+| `load_rgb` | 1 | `RGB ← dato seleccionado` | T2 |
+| `rgb_sel` | 2 | 00 framebuffer, 01 patrón 1, 10 patrón 2 (se decodifica del estado) | T2 |
+| `load_row` | 1 | `ROW ← r` | T5 |
+| `clear_cnt` | 1 | `cnt ← 0` (prioridad sobre `inc_cnt`) | T5, T7, T8 |
+| `inc_cnt` | 1 | `cnt ← cnt + 1` | T6 |
+| `inc_row` | 1 | `r ← r + 1`; `frame + 1` si r = 31 | T7, T8 |
+| `last_col` | 1 | Retorno: la columna actual es la 63 | T3/T4 |
+| `lat_zone1`, `lat_zone2` | 1 | Retorno: la columna está en la zona de `LAT` | T2 |
+| `last_cnt` | 1 | Retorno: último tick de DISPLAY | T6/T7/T8 |
+| `oe_on` | 1 | Retorno: en este tick el panel debe encenderse | T6 |
+
+Las órdenes se calculan combinacionalmente a partir del estado, `tick`, `enable`, `CLK` y las condiciones, de modo que estén estables antes del flanco que ejecuta la operación. El datapath no recibe `tick` ni `enable`: recibe órdenes ya decodificadas. `CLK`, `LAT` y `OE` son registros del controlador, no del datapath.
+
 
 ### 9. Máquina de estados del controlador
 
