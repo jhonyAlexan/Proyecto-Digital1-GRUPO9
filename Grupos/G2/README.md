@@ -40,7 +40,7 @@ Para que todos los módulos del proyecto encajen sin problemas de sincronizació
   
   ### 2.2 Mapa de Memoria Unificado del SoC (FemtoRV32)
 
-Siguiendo el estándar de decodificación por regiones del documento `uart-riscv.pdf`, los periféricos se seleccionan mediante los bits superiores de la dirección (`mem_addr[31:16]`), permitiendo un mapeo limpio del `chip_select`.
+Los periféricos se seleccionan mediante los bits superiores de la dirección (`mem_addr[31:16]`), permitiendo un mapeo limpio del `chip_select`.
 
 | Rango de Direcciones | Tamaño | Subgrupo | Periférico / Región | Descripción de Acceso |
 | :--- | :---: | :---: | :--- | :--- |
