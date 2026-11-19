@@ -1,0 +1,5 @@
+firmware/*.o
+firmware/*.elf
+firmware/*.bin
+firmware/firmware.hex
+web/juego.wasm

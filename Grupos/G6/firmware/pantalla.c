@@ -98,32 +98,112 @@ static void fondo(void) {
   // la isla
   rect(ISLA_X0, ISLA_Y, ISLA_X1 - ISLA_X0, 2, VERDE);
   rect(ISLA_X0 + 2, ISLA_Y + 2, ISLA_X1 - ISLA_X0 - 4, 4, AMARILLO);
+  // las plataformas de arriba
+  const plataforma_t *p = plataformas;
+  for (int i = 0; i < N_PLATAFORMAS; i++, p++) rect(p->x0, p->y, p->x1 - p->x0, 2, CIAN);
 }
 
-static void dibujar_luchador(luchador_t *l) {
+// Dibujos de 10 x 14 mirando a la derecha. Cada letra es un color:
+// . vacio, a azul, c cian, r rojo, m magenta, y amarillo, w blanco
+static const char *const robot[ALTO] = {
+  ".....r....",
+  ".....w....",
+  "...wwwww..",
+  "...wwcwc..",
+  "...wwwww..",
+  "..aaaaaa..",
+  ".wacaaaaw.",
+  ".wacaaaaw.",
+  ".waaaaaaw.",
+  "..aaaaaa..",
+  "..ww..ww..",
+  "..ww..ww..",
+  "..aa..aa..",
+  "..aaa.aaa.",
+};
+
+static const char *const caballero[ALTO] = {
+  "..mmm.....",
+  ".mm.......",
+  "..rrrrr...",
+  "..rrrrrr..",
+  "..rrrwww..",
+  "..rrrrrr..",
+  ".mmrrrrmm.",
+  ".mryyyyrm.",
+  ".mrrrrrrm.",
+  "..yyyyyy..",
+  "..rr..rr..",
+  "..mm..mm..",
+  "..rr..rr..",
+  "..rrr.rrr.",
+};
+
+static uint8_t color_de(char c) {
+  switch (c) {
+    case 'a': return AZUL;
+    case 'c': return CIAN;
+    case 'r': return ROJO;
+    case 'm': return MAGENTA;
+    case 'y': return AMARILLO;
+    case 'w': return BLANCO;
+    default:  return NEGRO;  // vacio
+  }
+}
+
+// copia el dibujo a la pantalla; si mira a la izquierda lo voltea
+static void sprite(int x, int y, const char *const *dib, int dir, int blanco) {
+  for (int f = 0; f < ALTO; f++) {
+    int py = y - ALTO + f;
+    const char *fila = dib[f];
+    if (py >= 0 && py < 64) {
+      for (int c = 0; c < ANCHO; c++) {
+        char k = (dir > 0) ? fila[c] : fila[ANCHO - 1 - c];
+        int px = x + c;
+        if (k != '.' && px >= 0 && px < 64) pantalla[(py << 6) + px] = blanco ? BLANCO : color_de(k);
+      }
+    }
+    leer_uart();
+  }
+}
+
+static void dibujar_luchador(luchador_t *l, const char *const *dib) {
   // al reaparecer parpadea mientras es invulnerable
   if (l->t_invulnerable > 0 && ((l->t_invulnerable >> 2) & 1)) return;
 
   int x = l->x >> 8, y = l->y >> 8;
-  uint8_t c2 = l->destello > 0 ? BLANCO : l->color2;  // acaba de recibir un golpe
 
-  rect(x + 2, y - 11, 4, 3, c2);        // cabeza
-  rect(x + 1, y - 8, 6, 4, l->color);   // cuerpo
-  rect(x + 1, y - 4, 2, 4, c2);         // piernas
-  rect(x + 5, y - 4, 2, 4, c2);
-
-  // escudo: un marco blanco alrededor del cuerpo
-  if (l->estado == ESCUDO) {
-    rect(x - 2, y - 13, 12, 1, BLANCO);
-    rect(x - 2, y, 12, 1, BLANCO);
-    rect(x - 2, y - 13, 1, 14, BLANCO);
-    rect(x + 9, y - 13, 1, 14, BLANCO);
+  // fuera de la pantalla: un marcador en el borde muestra por donde va
+  if (x + ANCHO <= 0 || x >= 64 || y - ALTO >= 64 || y <= 0) {
+    int mx = x + (ANCHO >> 1) - 1, my = y - (ALTO >> 1) - 1;
+    if (mx < 0) mx = 0;
+    if (mx > 61) mx = 61;
+    if (my < 12) my = 12;  // debajo del marcador de dano
+    if (my > 61) my = 61;
+    rect(mx, my, 3, 3, l->color);
+    pantalla[((my + 1) << 6) + mx + 1] = BLANCO;
+    return;
   }
 
-  // el golpe se ve en sus cuadros activos
+  sprite(x, y, dib, l->dir, l->destello > 0);  // en blanco si acaba de recibir un golpe
+
+  // escudo: un marco blanco alrededor
+  if (l->estado == ESCUDO) {
+    rect(x - 2, y - ALTO - 2, ANCHO + 4, 1, BLANCO);
+    rect(x - 2, y, ANCHO + 4, 1, BLANCO);
+    rect(x - 2, y - ALTO - 2, 1, ALTO + 3, BLANCO);
+    rect(x + ANCHO + 1, y - ALTO - 2, 1, ALTO + 3, BLANCO);
+  }
+
+  // el golpe se ve en sus cuadros activos: brazo y puno
   if (l->estado == GOLPE && l->t_golpe >= 3 && l->t_golpe <= 7) {
-    if (l->dir > 0) rect(x + 8, y - 8, 8, 5, BLANCO);
-    else rect(x - 8, y - 8, 8, 5, BLANCO);
+    if (l->dir > 0) {
+      rect(x + ANCHO - 1, y - 8, 5, 2, l->color2);
+      rect(x + ANCHO + 4, y - 10, 4, 5, BLANCO);
+    } else {
+      rect(x - 4, y - 8, 5, 2, l->color2);
+      rect(x - 8, y - 10, 4, 5, BLANCO);
+    }
   }
 }
 
@@ -139,26 +219,26 @@ static void marcador(juego_t *g) {
 void dibujar(juego_t *g) {
   int t = g->tiempo;
   fondo();
-  dibujar_luchador(&g->j[0]);
-  dibujar_luchador(&g->j[1]);
+  dibujar_luchador(&g->j[0], robot);
+  dibujar_luchador(&g->j[1], caballero);
 
   if (g->estado == INICIO) {
-    texto(22, 10, "PELEA", AMARILLO);
+    texto(22, 3, "PELEA", AMARILLO);
     // cuadrito verde si el mando esta conectado
-    texto(25, 19, "J1", BLANCO);
-    rect(34, 19, 5, 5, conectado(0) ? VERDE : ROJO);
-    texto(25, 26, "J2", BLANCO);
-    rect(34, 26, 5, 5, conectado(1) ? VERDE : ROJO);
-    if ((t >> 4) & 1) texto(22, 33, "PULSA", BLANCO);
+    texto(14, 10, "J1", BLANCO);
+    rect(23, 10, 5, 5, conectado(0) ? VERDE : ROJO);
+    texto(36, 10, "J2", BLANCO);
+    rect(45, 10, 5, 5, conectado(1) ? VERDE : ROJO);
+    if ((t >> 4) & 1) texto(22, 17, "PULSA", BLANCO);
     return;
   }
 
   marcador(g);
   if (g->estado == FIN) {
-    texto(24, 16, "GANA", AMARILLO);
-    if (g->ganador == 1) texto(28, 24, "J1", BLANCO);
-    else texto(28, 24, "J2", BLANCO);
-    if ((t >> 4) & 1) texto(17, 32, "REVANCHA", BLANCO);
+    texto(18, 12, "GANA", AMARILLO);
+    if (g->ganador == 1) texto(38, 12, "J1", BLANCO);
+    else texto(38, 12, "J2", BLANCO);
+    if ((t >> 4) & 1) texto(17, 18, "REVANCHA", BLANCO);
     // barra mientras mantiene el boton: llena = volver al inicio
     if (g->sostenido > 0) rect(2, 60, g->sostenido >> 1, 2, AMARILLO);
   }

@@ -48,12 +48,12 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--texto); }
     <span>J2</span><span id="t2">--</span>
   </div>
   <div class="fila">
-    <span>Saca al rival de la isla: cada golpe le sube el daño y lo empuja más lejos. Gana quien le quite las 3 vidas.</span>
+    <span>Saca al rival del escenario: cada golpe le sube el daño y lo empuja más lejos. Fuera de la isla se puede volver con el doble salto. Gana quien le quite las 3 vidas.</span>
     <span>Mientras el mando se mueve, golpea. El botón cubre con el escudo. Al final: botón = revancha, mantener 2 s = inicio.</span>
   </div>
   <div class="fila">
-    <span>J1: <kbd>A D</kbd> mover, <kbd>W</kbd> saltar (doble), <kbd>G</kbd> mover el mando (golpe), <kbd>F</kbd> botón (escudo)</span>
-    <span>J2: <kbd>← →</kbd> mover, <kbd>↑</kbd> saltar (doble), <kbd>L</kbd> mover el mando (golpe), <kbd>K</kbd> botón (escudo)</span>
+    <span>J1: <kbd>A D</kbd> correr, <kbd>W</kbd> saltar (doble), <kbd>S</kbd> bajar de una plataforma, <kbd>G</kbd> mover el mando (golpe), <kbd>F</kbd> botón (escudo)</span>
+    <span>J2: <kbd>← →</kbd> correr, <kbd>↑</kbd> saltar (doble), <kbd>↓</kbd> bajar de una plataforma, <kbd>L</kbd> mover el mando (golpe), <kbd>K</kbd> botón (escudo)</span>
   </div>
 </main>
 
@@ -61,8 +61,8 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--texto); }
 const WASM = "__WASM__";
 const ESTADOS = ['INICIO', 'JUGANDO', 'FIN'];
 const teclas = {
-  KeyA: [0, 'izq'], KeyD: [0, 'der'], KeyW: [0, 'arriba'], KeyF: [0, 'boton'], KeyG: [0, 'giro'],
-  ArrowLeft: [1, 'izq'], ArrowRight: [1, 'der'], ArrowUp: [1, 'arriba'], KeyK: [1, 'boton'], KeyL: [1, 'giro']
+  KeyA: [0, 'izq'], KeyD: [0, 'der'], KeyW: [0, 'arriba'], KeyS: [0, 'abajo'], KeyF: [0, 'boton'], KeyG: [0, 'giro'],
+  ArrowLeft: [1, 'izq'], ArrowRight: [1, 'der'], ArrowUp: [1, 'arriba'], ArrowDown: [1, 'abajo'], KeyK: [1, 'boton'], KeyL: [1, 'giro']
 };
 const ctl = [{}, {}];
 const seq = [0, 0];
@@ -84,7 +84,7 @@ function enviar() {
   for (let j = 0; j < 2; j++) {
     const c = ctl[j];
     const x = c.der ? 127 : c.izq ? -127 : 0;
-    const y = c.arriba ? 127 : 0;
+    const y = c.arriba ? 127 : c.abajo ? -127 : 0;
     const p = [0xAA, j + 1, seq[j]++ & 255, x & 255, y & 255, c.boton ? 1 : 0, c.giro ? 1 : 0];
     p.push(p[1] ^ p[2] ^ p[3] ^ p[4] ^ p[5] ^ p[6]);
     p.forEach(b => w.byte(b));
@@ -92,7 +92,7 @@ function enviar() {
   }
 }
 
-// sonidos de prueba (el de verdad lo hace el grupo morado)
+// sonidos de prueba (el de verdad lo hace el G5)
 const tonos = { 1: [660, .1], 4: [150, .08], 8: [90, .4], 9: [520, .5] };
 function sonar(codigo) {
   if (!audio || !tonos[codigo]) return;
