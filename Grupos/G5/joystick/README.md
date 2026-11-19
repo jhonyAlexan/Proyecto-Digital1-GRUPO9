@@ -157,7 +157,183 @@ mostrada es una propuesta pendiente de contrastar con el módulo Verilog.
 
 ### 3.2 Características de la interfaz
 
-> **Pendiente.** Listo cuando: cada señal tiene nombre, dirección y ancho; están el protocolo UART con la ESP32, el formato del paquete, el mapa de registros, los pines y los voltajes.
+### 3.2 Características de la interfaz
+
+El periférico joystick permite adquirir información de movimiento en dos ejes (X e Y) y detectar la pulsación de un botón. Para ello, se utiliza una ESP32 encargada de convertir las señales analógicas del joystick en valores digitales mediante su conversor analógico-digital (ADC). Posteriormente, estos datos se transmitirán hacia la FPGA mediante comunicación serial UART.
+
+Dentro de la FPGA, el periférico recibirá y procesará los datos, almacenándolos en registros mapeados en memoria para que puedan ser consultados por el procesador femtoRV32.
+
+La interfaz se divide en tres partes: conexión física del joystick con la ESP32, comunicación serial ESP32–FPGA e interfaz de registros con el procesador.
+
+#### 3.2.1 Conexión del joystick con la ESP32
+
+El joystick proporciona dos salidas analógicas correspondientes a sus ejes y una salida digital para el botón. La ESP32 utiliza sus entradas ADC para medir la posición de cada eje y una entrada digital para detectar la pulsación.
+
+Las conexiones definidas en el programa inicial son:
+
+| Señal | Pin ESP32 | Tipo de señal | Función |
+|---|---|---|---|
+| `VRx` | GPIO34 | Entrada analógica | Lectura de la posición horizontal |
+| `VRy` | GPIO35 | Entrada analógica | Lectura de la posición vertical |
+| `SW` | GPIO13 | Entrada digital | Detección de pulsación del botón |
+| `VCC` | 3,3 V propuestos | Alimentación | Alimentación del joystick |
+| `GND` | GND | Referencia | Tierra común |
+
+Los ejes X e Y se leen mediante el ADC de 12 bits de la ESP32, obteniendo valores digitales entre 0 y 4095. El botón se configura con una resistencia pull-up interna, por lo que presenta un nivel lógico bajo cuando está presionado y alto cuando se encuentra liberado.
+
+Los valores obtenidos deberán calibrarse para determinar la posición central y los desplazamientos máximos de cada eje. La configuración del ADC y la alimentación propuesta de 3,3 V requieren comprobación con el joystick físico.
+
+#### 3.2.2 Comunicación UART entre la ESP32 y la FPGA
+
+La transmisión de información se realizará mediante UART (*Universal Asynchronous Receiver-Transmitter*), un protocolo de comunicación serial asíncrona que permite enviar datos sin necesidad de compartir una señal de reloj entre los dispositivos.
+
+La interfaz propuesta presenta las siguientes características:
+
+| Parámetro | Característica |
+|---|---|
+| Protocolo | UART |
+| Velocidad | 115200 baudios |
+| Bits de datos | 8 |
+| Paridad | Ninguna |
+| Bits de parada | 1 |
+| Configuración | 8N1 |
+| Transmisor | ESP32 |
+| Receptor | FPGA |
+| Nivel lógico previsto | 3,3 V |
+| Frecuencia de transmisión propuesta | 30 paquetes por segundo |
+
+La ESP32 enviará los datos del joystick mediante una línea TX, mientras que la FPGA los recibirá por una entrada RX. Ambos dispositivos deberán compartir GND y utilizar parámetros de comunicación compatibles.
+
+La línea de recepción es asíncrona respecto al reloj de la FPGA, por lo que deberá sincronizarse antes de procesar los bits recibidos.
+
+Para las pruebas se utilizará la Tang Nano 9K, cuyo reloj principal es de 27 MHz. La frecuencia del reloj y la velocidad de comunicación deberán manejarse como parámetros para facilitar la adaptación del diseño a otras placas.
+
+#### 3.2.3 Formato del paquete UART
+
+Para organizar la información transmitida se propone utilizar un paquete de 8 bytes que incluya los valores de los ejes, el botón y la información necesaria para identificar al jugador.
+
+| Byte | Campo | Ancho | Descripción |
+|---|---|---|---|
+| 0 | Inicio | 8 bits | Valor fijo `0xAA` |
+| 1 | Jugador | 8 bits | Identificador del jugador 1 o 2 |
+| 2 | Secuencia | 8 bits | Número consecutivo del paquete |
+| 3 | Eje X | 8 bits | Posición horizontal del joystick |
+| 4 | Eje Y | 8 bits | Posición vertical del joystick |
+| 5 | Botón | 8 bits | Bit 0: estado del botón |
+| 6 | Ataque | 8 bits | Bit 0: señal de ataque |
+| 7 | Checksum | 8 bits | Verificación XOR de los bytes 1 a 6 |
+
+Los valores originales del ADC son de 12 bits, por lo que deberán convertirse a una representación de 8 bits con signo antes de transmitirse. Esta conversión permitirá representar desplazamientos negativos y positivos respecto a la posición central del joystick.
+
+El botón se representará mediante un valor lógico de 1 cuando se encuentre presionado y 0 cuando esté liberado. El campo de ataque se reserva para la integración posterior de la señal correspondiente al sensor de movimiento.
+
+El checksum se calculará mediante la operación XOR entre los bytes 1 y 6. La información recibida solo se considerará válida después de comprobar el paquete completo.
+
+Cada paquete contiene 64 bits de información. Debido a que UART 8N1 utiliza un bit de inicio y uno de parada por byte, su transmisión requiere 80 tiempos de bit. A 115200 baudios, esto corresponde aproximadamente a 0,69 ms por paquete.
+
+Se propone transmitir 30 paquetes por segundo, con un intervalo aproximado de 33,3 ms. Esta frecuencia todavía debe implementarse en el programa de la ESP32, que actualmente realiza una prueba de lectura e impresión de valores cada 100 ms.
+
+#### 3.2.4 Interfaz lógica del periférico con el procesador
+
+El periférico se conectará al procesador femtoRV32 mediante la interfaz de acceso a registros del SoC.
+
+Las señales propuestas son:
+
+| Señal | Dirección | Ancho | Función |
+|---|---|---|---|
+| `clk` | Entrada | 1 bit | Reloj del sistema |
+| `rst` | Entrada | 1 bit | Reinicio síncrono activo en alto |
+| `cs` | Entrada | 1 bit | Selección del periférico |
+| `addr[31:0]` | Entrada | 32 bits | Dirección u offset de acceso a registros |
+| `rd` | Entrada | 1 bit | Habilitación de lectura |
+| `wr` | Entrada | 1 bit | Habilitación de escritura |
+| `d_in[31:0]` | Entrada | 32 bits | Datos procedentes del procesador |
+| `d_out[31:0]` | Salida | 32 bits | Datos entregados al procesador |
+| `uart_rx` | Entrada | 1 bit | Recepción de los datos enviados por la ESP32 |
+
+Se propone mantener una interfaz de dirección de 32 bits, compatible con el ancho utilizado por el SoC base, y decodificar internamente los bits necesarios para identificar los registros. La adaptación entre dirección completa y desplazamiento local deberá establecerse durante la integración.
+
+El procesador accederá principalmente mediante operaciones de lectura, puesto que los datos del joystick se originan fuera de la FPGA. Las señales `wr` y `d_in` se conservan por compatibilidad con la interfaz común, aunque no se proponen registros de escritura en esta versión.
+
+#### 3.2.5 Mapa de registros del joystick
+
+Se propone utilizar tres registros de 32 bits para almacenar y consultar los datos recibidos.
+
+| Offset | Registro | Acceso | Función |
+|---|---|---|---|
+| `0x00` | `JOY1_DATA` | Lectura | Información del joystick del jugador 1 |
+| `0x04` | `JOY2_DATA` | Lectura | Información del joystick del jugador 2 |
+| `0x08` | `STATUS` | Lectura | Estado de recepción y errores |
+
+Los registros `JOY1_DATA` y `JOY2_DATA` tendrán la siguiente distribución:
+
+| Bits | Campo | Función |
+|---|---|---|
+| `[7:0]` | Eje X | Posición horizontal, 8 bits con signo |
+| `[15:8]` | Eje Y | Posición vertical, 8 bits con signo |
+| `[16]` | Botón | 1 = presionado, 0 = liberado |
+| `[17]` | Ataque | 1 = evento de ataque, 0 = sin ataque |
+| `[23:18]` | Reservados | Valor cero |
+| `[31:24]` | Secuencia | Identificador consecutivo del paquete recibido |
+
+El registro `STATUS` permitirá consultar la validez de la recepción:
+
+| Bit | Campo | Función |
+|---|---|---|
+| 0 | `P1_VALID` | Se ha recibido al menos un paquete válido del jugador 1 |
+| 1 | `P2_VALID` | Se ha recibido al menos un paquete válido del jugador 2 |
+| 2 | `UART_ERROR` | Se ha detectado un error de trama UART |
+| 3 | `CHECKSUM_ERROR` | Se ha detectado un paquete con checksum incorrecto |
+| `[31:4]` | Reservados | Valor cero |
+
+Se propone que las banderas de validez y error permanezcan activas hasta el reinicio del periférico. Los registros de cada jugador solo se actualizarán cuando se reciba y valide un paquete completo, evitando que el procesador consulte una combinación de datos pertenecientes a paquetes diferentes.
+
+Cuando se detecte un error, deberán conservarse los últimos datos válidos. La recuperación y resincronización después de paquetes incompletos o corruptos se definirá en el diseño de la lógica de recepción.
+
+Las direcciones completas se obtendrán sumando los offsets a la dirección base del periférico, que todavía debe establecerse durante la integración con el SoC.
+
+Este mapa corresponde a una propuesta de diseño y aún no está implementado en Verilog.
+
+#### 3.2.6 Pines y niveles eléctricos
+
+La conexión entre la ESP32 y la FPGA requiere una línea de transmisión UART y una referencia de tierra común.
+
+| Señal | Conexión propuesta | Nivel eléctrico |
+|---|---|---|
+| `VRx` | Joystick → ESP32 GPIO34 | Analógica, dependiente de la posición |
+| `VRy` | Joystick → ESP32 GPIO35 | Analógica, dependiente de la posición |
+| `SW` | Joystick → ESP32 GPIO13 | Digital, 0 V o nivel alto de 3,3 V |
+| `VCC` | Alimentación del joystick | 3,3 V propuestos |
+| `GND` | Tierra común del sistema | 0 V |
+| `uart_tx` | ESP32 GPIO17 (propuesta) → FPGA | Salida UART de 3,3 V |
+| `uart_rx` | Tang Nano 9K, pin físico 33 (propuesta) | Entrada UART LVCMOS33 |
+| `clk` | Tang Nano 9K, pin físico 52 | Reloj de 27 MHz |
+
+Para la transmisión UART desde la ESP32 se propone utilizar GPIO17 mediante una interfaz serial de hardware. Esta asignación todavía no se encuentra implementada en el programa inicial y deberá comprobarse según el modelo y la disponibilidad de pines de la placa utilizada.
+
+Para la recepción en la Tang Nano 9K se propone el pin físico 33, configurado como entrada lógica de 3,3 V. Esta conexión deberá verificarse mediante el archivo de restricciones de la placa y pruebas eléctricas.
+
+La alimentación del joystick a 3,3 V se plantea para mantener sus salidas dentro de los niveles admitidos por la ESP32. Sin embargo, será necesario comprobar el rango efectivo de medición del ADC y ajustar su configuración para obtener lecturas adecuadas.
+
+#### 3.2.7 Condiciones de funcionamiento y validación
+
+El funcionamiento de la interfaz deberá garantizar la adquisición correcta de los ejes y del botón, la transmisión serial, la validación de paquetes y la disponibilidad de los datos para el procesador.
+
+Se establecen los siguientes criterios de comprobación:
+
+- Verificar que las lecturas de X e Y respondan al desplazamiento del joystick.
+- Comprobar que el botón se detecte correctamente al presionarlo y liberarlo.
+- Validar la transmisión y recepción UART a 115200 baudios con configuración 8N1.
+- Comprobar la recepción y decodificación de paquetes completos de 8 bytes.
+- Verificar el identificador del jugador, el número de secuencia y el checksum.
+- Confirmar que los registros se actualicen únicamente después de una recepción válida.
+- Comprobar que los errores de comunicación no modifiquen los últimos datos correctos.
+- Verificar la lectura de los registros desde la interfaz del procesador.
+- Confirmar la compatibilidad de los niveles eléctricos y las conexiones físicas.
+
+La arquitectura, el formato de paquete, el mapa de registros y las asignaciones físicas propuestas deberán validarse durante las etapas posteriores de descripción en Verilog, simulación e implementación.
+
+Actualmente se dispone de un programa inicial para la adquisición de los valores del joystick en la ESP32. El receptor completo, la interpretación de paquetes y los registros mapeados en memoria permanecen como elementos propuestos para su desarrollo.
 
 ### 3.3 Diagrama de bloques
 
