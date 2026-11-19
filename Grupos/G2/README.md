@@ -36,10 +36,11 @@ Para que todos los módulos del proyecto encajen sin problemas de sincronizació
 - **Alineación con G4 (Pantalla HUB75):** El framebuffer se organiza en **2 bancos de $2048 \times 3$ bits** (RGB de $3$ bits = $8$ colores, $1.5\text{ KB}$ en total) y se sincroniza con la bandera **`FRAME`** del registro `hub75_csr`, descartando el doble búfer de $16\text{ KB}$ que habíamos planteado al inicio.
 - **Alineación con G1, G3 y G5 (Controles y Audio):** Los datos del mando inalámbrico (Joystick analógico + IMU `BMI160` por SPI en la FPGA del mando) llegan por UART $\rightarrow$ Bluetooth (ESP32) hasta el receptor UART de la consola. **El audio se procesa mediante el protocolo I2S hacia un módulo DAC MAX98357A**.
 - **Recursos de juego (G6):** Las memorias guardan activos genéricos para juegos arcade retro simples (*sprites* 2D, mapas, fuentes y puntajes máximos).
-  
-### 2.2 Mapa de Memoria Unificado del SoC (FemtoRV32)
 
-Los periféricos se seleccionan mediante los bits superiores de la dirección (`mem_addr[31:16]`), permitiendo un mapeo limpio del `chip_select`.
+  
+  ### 2.2 Mapa de Memoria Unificado del SoC (FemtoRV32)
+
+Siguiendo el estándar de decodificación por regiones del documento `uart-riscv.pdf`, los periféricos se seleccionan mediante los bits superiores de la dirección (`mem_addr[31:16]`), permitiendo un mapeo limpio del `chip_select`.
 
 | Rango de Direcciones | Tamaño | Subgrupo | Periférico / Región | Descripción de Acceso |
 | :--- | :---: | :---: | :--- | :--- |
@@ -49,6 +50,8 @@ Los periféricos se seleccionan mediante los bits superiores de la dirección (`
 | `0x0042_0000` – `0x0042_000C` | $16\text{ B}$ | **G1 / G3** | `UART_INPUT_RX` | Receptor de tramas del mando inalámbrico (ejes del joystick, pulsadores y lecturas del `BMI160`). |
 | `0x0043_0000` – `0x0043_000C` | $16\text{ B}$ | **G5** | `AUDIO_I2S_CTRL` | Registros `FREQ`, `VOL` y `CONTROL` para el generador de audio I2S (MAX98357A). |
 | `0x2000_0000` – `0x2000_3FFF` | $16\text{ KB}$ (espacio) / $1.5\text{ KB}$ (físico) | **G2 / G4** | `FRAMEBUFFER_BRAM` | Escritura lineal de $4,096$ píxeles ($1$ palabra/píxel, `d_in[2:0] = {R,G,B}`) repartidos en dos bancos de $2048 \times 3$ bits. |
+
+
 ### 2.3 Flujo Completo del Envío de Datos al Juego
 
 En el siguiente diagrama se muestra cómo viajan los datos desde la memoria Flash hasta el panel LED, separando lo que corre en hardware (Verilog) y lo que ejecuta el FemtoRV32 en C:
