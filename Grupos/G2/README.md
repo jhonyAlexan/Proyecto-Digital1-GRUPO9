@@ -134,11 +134,11 @@ En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\te
 
 #### Secuencia Temporal Paso a Paso
 
-1. **Reposo (`IDLE`):** `spi_cs_n = 1` (si `cs_hold = 0`), `spi_sclk = 0`, `busy = 0` y `done = 0`.
-2. **Solicitud MMIO:** El CPU carga `SPI_CMD_ADDR` (`0x04`) y escribe `start = 1` por un ciclo de `clk`. La FSM pone `busy = 1` y espera el siguiente pulso `sclk_tick`.
+1. **Reposo (`IDLE`):** `spi_cs_n = 1` (si `cs_hold = 0`), `spi_sclk = 0`, `busy = 0` y `done = 0` (o retiene el `1` de la transacción anterior).
+2. **Solicitud MMIO:** El CPU carga `SPI_CMD_ADDR` (`0x04`) y escribe `start = 1`. La FSM pone `busy = 1`, **limpia la bandera `done = 0`** y espera el siguiente pulso `sclk_tick`.
 3. **Inicio y *Setup* ($t_0$):** Al llegar `sclk_tick`, `spi_cs_n` baja a `0` y `spi_mosi` saca de inmediato el bit más significativo `D7`, garantizando un tiempo de establecimiento de $T_{\text{half}}$ antes del primer flanco de subida de `spi_sclk`.
 4. **Muestreo y desplazamiento (`D7` $\rightarrow$ `D0`):** En cada **flanco de subida** de `spi_sclk`, el datapath captura `miso_sync`; en cada **flanco de bajada**, actualiza `spi_mosi` con el siguiente bit.
-5. **Parada y *Hold* ($t_f$):** Después del último flanco de bajada (`D0`), `spi_cs_n` se mantiene en bajo medio período más ($T_{\text{half}}$). En $t_f$, `spi_cs_n` vuelve a `~cs_hold`, `busy` pasa a `0` y `done` genera un pulso de **1 ciclo de `clk`**.
+5. **Parada y *Hold* ($t_f$):** Después del último flanco de bajada (`D0`), `spi_cs_n` se mantiene en bajo medio período más ($T_{\text{half}}$). En $t_f$, `spi_cs_n` vuelve a `~cs_hold`, `busy` pasa a `0` y **`done` se establece en `1` (funcionando como un *latch* o registro retenido hasta que el CPU envíe un nuevo `start`).**
 
 #### Cálculos Temporales y Ancho de Banda ($f_{\text{clk}} = 27\text{ MHz}$, $N = 4$)
 
@@ -174,8 +174,9 @@ En el diagrama de flujo comportamental clasificamos cada operación según el bl
 
 ![Diagrama de Flujo Funcional y Clasificación FSMD](img/flujo_funcional_spi_g2.png)
 
-- **Multiplexación automática de trama (`next_byte`):** Al terminar cada byte (`bit_cnt == 7`), el datapath incrementa `byte_cnt` ($0$ a $4$) y carga secuencialmente `addr_reg[23:16]`, `addr_reg[15:8]`, `addr_reg[7:0]` y `tx_reg[7:0]` sin perder ciclos entre bytes.
-- **Encadenamiento en ráfaga (`cs_hold`):** Si el firmware deja `cs_hold = 1`, `spi_cs_n` no sube al volver a `IDLE`, aprovechando que la `W25Q64JV` incrementa sola su puntero interno de dirección mientras `CS#` siga en bajo.
+- **Longitud de Trama Dinámica (`byte_done`):** Para soportar transacciones de diferente tamaño, el datapath no usa un límite fijo de bytes. Al arrancar, decodifica el código de operación (`cmd_reg`) para definir la longitud total de la transferencia en un registro interno `len` (por ejemplo, si el comando es `0x06` WREN, `len = 1`; si es `0x20` Sector Erase, `len = 4`; para lectura/escritura normal, `len = 5`). La bandera `byte_done` se activa dinámicamente cuando el contador alcanza esta longitud.
+- **Retención de Señal (`done` como *Latch*):** Para evitar que el procesador FemtoRV32 (que lee el estado mediante *polling* a una frecuencia diferente) pierda la bandera de finalización, la señal `done` dejó de ser un pulso de un solo ciclo. Ahora es un *latch* (registro retenido) que se queda en `1` tras terminar el estado `STOP` y solo se borra (`0`) cuando el procesador inicia una nueva transmisión con `start = 1`.
+- **Gestión de Transferencias Múltiples (`cs_hold`):** El uso de `cs_hold` le da al procesador control directo sobre la línea física. Sin embargo, para la memoria `W25Q64JV`, **cada vez que se baja el `CS_N` (Chip Select) se debe enviar el comando y la dirección nuevamente**. No es posible reanudar una lectura soltando el bus y retomándolo sin retransmitir la cabecera completa.
 
 ---
 
@@ -189,19 +190,18 @@ Con base en la separación FSMD definimos una **Máquina de Estados Finitos (FSM
 
 | Estado Actual | Código | Condición de Transición | Estado Siguiente | Salidas de Control (`Moore` / `Mealy`) | Transferencias RTL en Datapath |
 | :--- | :---: | :--- | :---: | :--- | :--- |
-| **`IDLE`** | `3'b000` | `rst = 1` $\lor$ `start = 0` | `IDLE` | `spi_cs_n = ~cs_hold`, `spi_sclk = 0`, `busy = 0`, `done = 0` | Mantiene registros sin cambios |
-| **`IDLE`** | `3'b000` | `start = 1` | `LOAD_CMD` | `busy <= 1` | `cmd_reg <= cmd`, `addr_reg <= addr`, `tx_reg <= tx_data` |
-| **`LOAD_CMD`** | `3'b001` | `sclk_tick = 0` | `LOAD_CMD` | `spi_sclk = 0`, `busy = 1`, `done = 0` | Espera sincronización con frontera de `sclk_tick` |
+| **`IDLE`** | `3'b000` | `rst = 1` $\lor$ `start = 0` | `IDLE` | `spi_cs_n = ~cs_hold`, `spi_sclk = 0`, `busy = 0` | Mantiene registros sin cambios (retiene `done`) |
+| **`IDLE`** | `3'b000` | `start = 1` | `LOAD_CMD` | `busy <= 1`, **`done <= 0`** | `cmd_reg <= cmd`, decodifica tamaño de trama a variable `len`, `addr_reg <= addr`, `tx_reg <= tx_data` |
+| **`LOAD_CMD`** | `3'b001` | `sclk_tick = 0` | `LOAD_CMD` | `spi_sclk = 0`, `busy = 1` | Espera sincronización con frontera de `sclk_tick` |
 | **`LOAD_CMD`** | `3'b001` | `sclk_tick = 1` | `SCLK_LOW` | `spi_cs_n <= 0` ($t_0$) | `bit_cnt <= 0`, `byte_cnt <= 0`, `shift_reg <= cmd_reg`, `spi_mosi <= cmd_reg[7]` |
 | **`SCLK_LOW`** | `3'b010` | `sclk_tick = 0` | `SCLK_LOW` | `spi_cs_n = 0`, `spi_sclk = 0`, `busy = 1` | Mantiene `spi_mosi` estable (*setup* $T_{\text{half}}$) |
 | **`SCLK_LOW`** | `3'b010` | `sclk_tick = 1` | `SCLK_HIGH` | `spi_sclk <= 1` (Flanco $\uparrow$) | `shift_reg <= {shift_reg[6:0], miso_sync}` |
 | **`SCLK_HIGH`** | `3'b011` | `sclk_tick = 0` | `SCLK_HIGH` | `spi_cs_n = 0`, `spi_sclk = 1`, `busy = 1` | Mantiene nivel alto de `spi_sclk` |
 | **`SCLK_HIGH`** | `3'b011` | `sclk_tick & ~last_bit` | `SCLK_LOW` | `spi_sclk <= 0` (Flanco $\downarrow$) | `bit_cnt <= bit_cnt + 1`, `spi_mosi <= shift_reg[7]` |
-| **`SCLK_HIGH`** | `3'b011` | `sclk_tick & last_bit & ~byte_done` | `SCLK_LOW` | `spi_sclk <= 0` (Flanco $\downarrow$) | `rx_data <= shift_reg`, `byte_cnt <= byte_cnt + 1`, `bit_cnt <= 0`, `shift_reg <= next_byte`, `spi_mosi <= next_byte[7]` |
-| **`SCLK_HIGH`** | `3'b011` | `sclk_tick & last_bit & byte_done` | `STOP` | `spi_sclk <= 0` (Flanco $\downarrow$) | `rx_data <= shift_reg` (captura byte final) |
+| **`SCLK_HIGH`** | `3'b011` | `sclk_tick & last_bit & ~byte_done` | `SCLK_LOW` | `spi_sclk <= 0` (Flanco $\downarrow$) | `rx_data <= shift_reg`, `byte_cnt++`, `bit_cnt <= 0`, `shift_reg <= next_byte` |
+| **`SCLK_HIGH`** | `3'b011` | `sclk_tick & last_bit & byte_done` | `STOP` | `spi_sclk <= 0` (Flanco $\downarrow$) | `rx_data <= shift_reg` (captura byte final). *Nota: `byte_done` se activa si `byte_cnt == len - 1`* |
 | **`STOP`** | `3'b100` | `sclk_tick = 0` | `STOP` | `spi_cs_n = 0`, `spi_sclk = 0`, `busy = 1` | Retiene `spi_cs_n = 0` (*hold* $T_{\text{half}}$) |
-| **`STOP`** | `3'b100` | `sclk_tick = 1` | `IDLE` | `spi_cs_n <= ~cs_hold`, `done <= 1` ($t_f$) | Pulso `done` activo durante $1$ ciclo de `clk` |
-
+| **`STOP`** | `3'b100` | `sclk_tick = 1` | `IDLE` | `spi_cs_n <= ~cs_hold`, **`done <= 1`** ($t_f$) | **La señal `done` se enclava (latch) indefinidamente** |
 ---
 
 ## 4. Inferencia y Manejo de BRAM Dual-Port
