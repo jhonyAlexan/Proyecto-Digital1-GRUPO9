@@ -4,6 +4,8 @@ Grupo 3: Kennet, Jeimy, Alexander.
 Còdigo en Verilog para leer aceleración y velocidad angular desde una IMU **BMI160** mediante protocolo SPI (Modo 0) en una FPGA **Tang Nano 9K**, la idea es que el sistema calcule la intensidad del movimiento en tiempo real y entrega una señal digital (`1` o `0`) ante golpes o giros bruscos.
 La direcciòn del golpe o giro es indiferente.
 
+Se actualizaron algunos errores en los códigos.
+
 Se analizó el diagrama de flujo del protocolo SPI para enviar una trama de 6 bytes con el profesor se le pidió recomendación y revisión de como se realiza el diagrama de tiempo, luego se hizo uso de la IA como apoyo para la generación del código en verilog siendo mas completo para el envío de los datos de giroscopio y acelerómetro, asi como para los demas archivos basado en los ejemplos de los códigos de los laboratorios en clase.
 
 Queda pendidente subir el diagrama de datapath y de la máquina de estados al Github, se debe analizar que coincidan con el codigo generado, hacer ajustes y arreglos a ambos, revisar el martes con el profesor estos diagramas completos.
@@ -65,7 +67,7 @@ Con **OSS CAD Suite** activado en Linux, ejecutar dentro de la carpeta raíz:
    ```
    *(Si no muestra datos, cambiar `/dev/ttyUSB1` por `/dev/ttyUSB0`).*
 
-4. **Ajustar sensibilidad:** Modificar el parámetro `UMBRAL_GOLPE` en `rtl/detector_golpe.v` (valor actual: `45000 o 65000 no me acuerdo`). Subir el valor exige golpes más fuertes; bajarlo lo hace más sensible.
+4. **Ajustar sensibilidad:** Se puede modificar: `UMBRAL_GOLPE` en `rtl/detector_golpe.v` (valor actual: `65000 creo, ir variando y probar la sensibilidad`). Subir el valor exige golpes más fuertes; bajarlo lo hace más sensible.
 
 ---
 
