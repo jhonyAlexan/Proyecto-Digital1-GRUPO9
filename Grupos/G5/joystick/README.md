@@ -155,7 +155,7 @@ La ESP32 adquiere los ejes mediante su ADC y lee el botón como entrada
 digital. La Tang Nano 9K recibe los datos digitalizados. La interfaz
 mostrada es una propuesta pendiente de contrastar con el módulo Verilog.
 
-### 3.2 Características de la interfaz
+
 
 ### 3.2 Características de la interfaz
 
