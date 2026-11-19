@@ -142,9 +142,32 @@ En el SoC del curso el bus es Wishbone y cada periférico se conecta mediante un
 
 ## 2. Fundamento
 
-El joystick analógico permite detectar movimientos en dos ejes (X e Y) y la pulsación de un botón. La ESP32 recibe las señales de los ejes, las convierte en valores digitales mediante su conversor analógico-digital (ADC) y lee el estado del botón. Posteriormente, transmite esta información a la FPGA mediante comunicación serial UART. De esta manera, la ESP32 se encarga de adquirir las señales del joystick, mientras que la FPGA recibe los datos digitales.
+El periférico joystick tiene como propósito convertir los movimientos físicos del usuario en información digital que pueda ser interpretada por el sistema basado en FPGA. Su función es proporcionar al procesador femtoRV32 los datos necesarios para controlar los movimientos y las acciones de los jugadores dentro del videojuego.
 
-Dentro de la FPGA, el periférico del joystick procesa la información recibida y almacena los valores de los ejes y del botón en registros mapeados en memoria. El procesador femtoRV32 puede consultar estos registros a través del bus del sistema para conocer la posición del joystick y utilizarla como entrada de control de la consola. Así, el joystick se integra al sistema sin que el procesador tenga que realizar directamente la conversión de las señales analógicas.
+El joystick analógico dispone de dos ejes de movimiento (X e Y) y un pulsador integrado. Cada eje funciona mediante un potenciómetro que produce una variación de tensión cuando se desplaza la palanca. Estas variaciones permiten identificar la dirección y la magnitud del movimiento. Por su parte, el pulsador genera una señal digital que permite detectar una acción adicional del usuario.
+
+![Principio de funcionamiento del periférico joystick](diagramas/joystick_fundamento_funcionamiento.svg)
+
+Debido a que la FPGA trabaja con información digital, las señales analógicas del joystick deben convertirse antes de ser procesadas. Para ello, se utiliza una ESP32 que dispone de un conversor analógico-digital (ADC). Este dispositivo recibe las tensiones correspondientes a los ejes X e Y y las transforma en valores numéricos, mientras que el estado del botón se obtiene mediante una entrada digital.
+
+Las lecturas de los ejes se realizan inicialmente con una resolución de 12 bits, lo que permite representar 4096 niveles digitales. Sin embargo, para utilizar estos valores dentro del videojuego es necesario realizar un acondicionamiento de los datos. Por esta razón, el diseño contempla una etapa de calibración que permita identificar la posición central, los desplazamientos máximos y las pequeñas variaciones que puedan producirse durante la lectura. A partir de estos parámetros se propone convertir las mediciones a valores de 8 bits con signo, diferenciando los movimientos positivos y negativos respecto al centro.
+
+Una vez adquirida la información, la ESP32 se encargará de organizar los datos y transmitirlos hacia la FPGA mediante comunicación serial UART. Este protocolo permite el intercambio de información sin necesidad de compartir una señal de reloj entre los dispositivos, siempre que ambos utilicen parámetros de comunicación compatibles. Para el proyecto se propone trabajar a 115200 baudios, con una configuración de 8 bits de datos, sin paridad y un bit de parada (8N1).
+
+La información se organizará en paquetes que incluyan los valores de los ejes, el estado del botón y otros campos necesarios para identificar al jugador y verificar la integridad de la transmisión. También se contempla un campo destinado a incorporar posteriormente una señal de ataque. Esta estructura permitirá transmitir los diferentes datos asociados al control del videojuego de manera organizada.
+
+Dentro de la FPGA, el periférico joystick se encargará de recibir la señal UART, reconstruir los bytes y comprobar que el paquete recibido sea válido. Como la información procede de un dispositivo externo que trabaja con un reloj independiente, la señal de recepción deberá sincronizarse con el reloj del sistema antes de procesarse.
+
+Posteriormente, la lógica de recepción identificará el inicio del paquete, almacenará temporalmente los bytes recibidos y comprobará su integridad mediante un checksum. También se contempla un mecanismo de tiempo máximo de espera para descartar paquetes incompletos. Estas verificaciones permitirán evitar que información incorrecta sea utilizada para controlar el videojuego.
+
+Cuando se reciba un paquete válido, los valores correspondientes a los ejes y al botón se almacenarán en registros internos del periférico. El diseño contempla registros independientes para dos jugadores y un registro adicional para consultar el estado de la recepción. Los datos se actualizarán únicamente después de validar el paquete completo, garantizando que los valores almacenados correspondan a una misma transmisión. Si se detecta un error, se conservarán los últimos datos válidos.
+
+La comunicación entre el periférico y el procesador femtoRV32 se realizará mediante registros mapeados en memoria (MMIO). Bajo este principio, el procesador podrá consultar los valores del joystick utilizando operaciones de lectura sobre direcciones específicas del sistema. De esta manera, no necesitará realizar directamente la conversión analógica ni reconstruir los paquetes UART, ya que estas tareas estarán distribuidas entre la ESP32 y la lógica del periférico en la FPGA.
+
+Esta arquitectura permite separar el funcionamiento del sistema en tres etapas principales: adquisición de las señales mediante la ESP32, recepción y almacenamiento de la información mediante la FPGA, y utilización de los datos por parte del procesador femtoRV32 para ejecutar la lógica del videojuego. Esta distribución facilita el desarrollo y la verificación independiente de cada etapa.
+
+Actualmente se dispone de un programa inicial que permite adquirir las lecturas del joystick mediante la ESP32. La transmisión estructurada de paquetes, la recepción completa en Verilog y la integración definitiva de los registros mapeados en memoria forman parte de las siguientes etapas de implementación y validación del proyecto.
+
 ## 3. Etapa de diseño
 
 ### 3.1 Diagrama de caja negra

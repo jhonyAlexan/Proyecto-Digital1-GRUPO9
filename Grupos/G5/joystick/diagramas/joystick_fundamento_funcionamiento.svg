@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="870" viewBox="0 0 1640 870" role="img" aria-labelledby="fig-title fig-desc">
+<title id="fig-title">Principio de funcionamiento del periférico joystick, Grupo 5</title>
+<desc id="fig-desc">Diagrama conceptual de diez etapas: movimiento del usuario, joystick analógico, variación de tensión, adquisición en ESP32, empaquetado, comunicación UART, recepción en FPGA, registros MMIO, procesador femtoRV32 y control del videojuego. La lectura de la ESP32 ya tiene programa inicial; el resto del enlace corresponde a la propuesta de diseño.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 12 10" refX="10" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M1 1 L10 5 L1 9" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<style><![CDATA[
+text {font-family: Arial, Helvetica, sans-serif;}
+.h1 {font-size:31px; font-weight:700; fill:#162338;}
+.sub {font-size:18px; fill:#475569;}
+.group {font-size:17px; font-weight:700; fill:#475569; letter-spacing:0.8px;}
+.num {font-size:15px; font-weight:700; fill:#ffffff;}
+.nodeTitle {font-size:23px; font-weight:700; fill:#162338;}
+.nodeSub {font-size:17px; fill:#445467;}
+.connector {font-size:17px; font-weight:700; fill:#ffffff;}
+.note {font-size:16px; fill:#334155;}
+.footer {font-size:15px; fill:#64748b;}
+]]></style>
+</defs>
+<rect x="0" y="0" width="1640" height="870" rx="0" fill="#ffffff" stroke="none" stroke-width="0"/>
+<rect x="65" y="46" width="8" height="56" rx="3" fill="#344b66"/>
+<text x="93" y="79" class="h1" text-anchor="start">Principio de funcionamiento del periférico joystick</text>
+<text x="94" y="109" class="sub" text-anchor="start">G5 · Adquisición analógica, comunicación serial y control del videojuego</text>
+<rect x="1335" y="51" width="235" height="37" rx="19" fill="#f1f5f9" stroke="#cbd5e1"/>
+<text x="1452" y="75" class="group" text-anchor="middle">PROPUESTA FUNCIONAL</text>
+<line x1="92" y1="157" x2="1546" y2="157" stroke="#e2e8f0" stroke-width="1.8"/>
+<text x="92" y="145" class="group" text-anchor="start">ETAPA 1 · MOVIMIENTO, ADQUISICIÓN Y EMPAQUETADO</text>
+<line x1="92" y1="458" x2="1546" y2="458" stroke="#e2e8f0" stroke-width="1.8"/>
+<text x="92" y="447" class="group" text-anchor="start">ETAPA 2 · TRANSMISIÓN UART, RECEPCIÓN Y USO EN EL SOC</text>
+<rect x="92" y="204" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M93 216 Q93 205 105 205 H317 Q329 205 329 216 V217 H93 Z" fill="#3e546e"/>
+<circle cx="119" cy="240" r="19" fill="#344b66"/>
+<text x="119" y="245" class="num" text-anchor="middle">01</text>
+<text x="211.0" y="281" class="nodeTitle" text-anchor="middle">Movimiento del</text>
+<text x="211.0" y="310" class="nodeTitle" text-anchor="middle">usuario</text>
+<line x1="117" y1="325" x2="305" y2="325" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="211.0" y="348" class="nodeSub" text-anchor="middle">Acción física sobre</text>
+<text x="211.0" y="370" class="nodeSub" text-anchor="middle">la palanca y el botón</text>
+<line x1="337" y1="290" x2="387" y2="290" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<rect x="396" y="204" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M397 216 Q397 205 409 205 H621 Q633 205 633 216 V217 H397 Z" fill="#3e546e"/>
+<circle cx="423" cy="240" r="19" fill="#344b66"/>
+<text x="423" y="245" class="num" text-anchor="middle">02</text>
+<text x="515.0" y="281" class="nodeTitle" text-anchor="middle">Joystick</text>
+<text x="515.0" y="310" class="nodeTitle" text-anchor="middle">analógico</text>
+<line x1="421" y1="325" x2="609" y2="325" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="515.0" y="348" class="nodeSub" text-anchor="middle">Ejes X, Y y pulsador</text>
+<text x="515.0" y="370" class="nodeSub" text-anchor="middle">(VRx, VRy, SW)</text>
+<line x1="641" y1="290" x2="691" y2="290" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<rect x="700" y="204" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M701 216 Q701 205 713 205 H925 Q937 205 937 216 V217 H701 Z" fill="#3e546e"/>
+<circle cx="727" cy="240" r="19" fill="#344b66"/>
+<text x="727" y="245" class="num" text-anchor="middle">03</text>
+<text x="819.0" y="281" class="nodeTitle" text-anchor="middle">Variación de</text>
+<text x="819.0" y="310" class="nodeTitle" text-anchor="middle">tensión</text>
+<line x1="725" y1="325" x2="913" y2="325" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="819.0" y="348" class="nodeSub" text-anchor="middle">Dos señales analógicas</text>
+<text x="819.0" y="370" class="nodeSub" text-anchor="middle">y una señal digital</text>
+<line x1="945" y1="290" x2="995" y2="290" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<rect x="1004" y="204" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M1005 216 Q1005 205 1017 205 H1229 Q1241 205 1241 216 V217 H1005 Z" fill="#3e546e"/>
+<circle cx="1031" cy="240" r="19" fill="#344b66"/>
+<text x="1031" y="245" class="num" text-anchor="middle">04</text>
+<text x="1123.0" y="281" class="nodeTitle" text-anchor="middle">ESP32</text>
+<text x="1123.0" y="310" class="nodeTitle" text-anchor="middle">adquisición</text>
+<line x1="1029" y1="325" x2="1217" y2="325" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="1123.0" y="348" class="nodeSub" text-anchor="middle">ADC de 12 bits</text>
+<text x="1123.0" y="370" class="nodeSub" text-anchor="middle">y lectura del botón</text>
+<line x1="1249" y1="290" x2="1299" y2="290" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<rect x="1308" y="204" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M1309 216 Q1309 205 1321 205 H1533 Q1545 205 1545 216 V217 H1309 Z" fill="#3e546e"/>
+<circle cx="1335" cy="240" r="19" fill="#344b66"/>
+<text x="1335" y="245" class="num" text-anchor="middle">05</text>
+<text x="1427.0" y="281" class="nodeTitle" text-anchor="middle">Empaquetado</text>
+<text x="1427.0" y="310" class="nodeTitle" text-anchor="middle">de datos</text>
+<line x1="1333" y1="325" x2="1521" y2="325" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="1427.0" y="348" class="nodeSub" text-anchor="middle">Trama propuesta de</text>
+<text x="1427.0" y="370" class="nodeSub" text-anchor="middle">8 bytes y checksum</text>
+<rect x="92" y="505" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M93 517 Q93 506 105 506 H317 Q329 506 329 517 V518 H93 Z" fill="#3e546e"/>
+<circle cx="119" cy="541" r="19" fill="#344b66"/>
+<text x="119" y="546" class="num" text-anchor="middle">06</text>
+<text x="211.0" y="582" class="nodeTitle" text-anchor="middle">Enlace</text>
+<text x="211.0" y="611" class="nodeTitle" text-anchor="middle">UART</text>
+<line x1="117" y1="626" x2="305" y2="626" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="211.0" y="649" class="nodeSub" text-anchor="middle">115200 baudios</text>
+<text x="211.0" y="671" class="nodeSub" text-anchor="middle">Configuración 8N1</text>
+<line x1="337" y1="591" x2="387" y2="591" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<rect x="396" y="505" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M397 517 Q397 506 409 506 H621 Q633 506 633 517 V518 H397 Z" fill="#3e546e"/>
+<circle cx="423" cy="541" r="19" fill="#344b66"/>
+<text x="423" y="546" class="num" text-anchor="middle">07</text>
+<text x="515.0" y="582" class="nodeTitle" text-anchor="middle">FPGA</text>
+<text x="515.0" y="611" class="nodeTitle" text-anchor="middle">recepción</text>
+<line x1="421" y1="626" x2="609" y2="626" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="515.0" y="649" class="nodeSub" text-anchor="middle">Sincronización, recepción</text>
+<text x="515.0" y="671" class="nodeSub" text-anchor="middle">y validación</text>
+<line x1="641" y1="591" x2="691" y2="591" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<rect x="700" y="505" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M701 517 Q701 506 713 506 H925 Q937 506 937 517 V518 H701 Z" fill="#3e546e"/>
+<circle cx="727" cy="541" r="19" fill="#344b66"/>
+<text x="727" y="546" class="num" text-anchor="middle">08</text>
+<text x="819.0" y="582" class="nodeTitle" text-anchor="middle">Registros</text>
+<text x="819.0" y="611" class="nodeTitle" text-anchor="middle">MMIO</text>
+<line x1="725" y1="626" x2="913" y2="626" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="819.0" y="649" class="nodeSub" text-anchor="middle">JOY1_DATA, JOY2_DATA</text>
+<text x="819.0" y="671" class="nodeSub" text-anchor="middle">y STATUS</text>
+<line x1="945" y1="591" x2="995" y2="591" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<rect x="1004" y="505" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M1005 517 Q1005 506 1017 506 H1229 Q1241 506 1241 517 V518 H1005 Z" fill="#3e546e"/>
+<circle cx="1031" cy="541" r="19" fill="#344b66"/>
+<text x="1031" y="546" class="num" text-anchor="middle">09</text>
+<text x="1123.0" y="582" class="nodeTitle" text-anchor="middle">Procesador</text>
+<text x="1123.0" y="611" class="nodeTitle" text-anchor="middle">femtoRV32</text>
+<line x1="1029" y1="626" x2="1217" y2="626" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="1123.0" y="649" class="nodeSub" text-anchor="middle">Lectura de registros</text>
+<text x="1123.0" y="671" class="nodeSub" text-anchor="middle">por el bus del SoC</text>
+<line x1="1249" y1="591" x2="1299" y2="591" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<rect x="1308" y="505" width="238" height="176" rx="12" fill="#ffffff" stroke="#9aa9b8" stroke-width="1.8"/>
+<path d="M1309 517 Q1309 506 1321 506 H1533 Q1545 506 1545 517 V518 H1309 Z" fill="#3e546e"/>
+<circle cx="1335" cy="541" r="19" fill="#344b66"/>
+<text x="1335" y="546" class="num" text-anchor="middle">10</text>
+<text x="1427.0" y="582" class="nodeTitle" text-anchor="middle">Control del</text>
+<text x="1427.0" y="611" class="nodeTitle" text-anchor="middle">videojuego</text>
+<line x1="1333" y1="626" x2="1521" y2="626" stroke="#e2e8f0" stroke-width="1.4"/>
+<text x="1427.0" y="649" class="nodeSub" text-anchor="middle">Movimiento y acciones</text>
+<text x="1427.0" y="671" class="nodeSub" text-anchor="middle">según el joystick</text>
+<circle cx="1583" cy="290" r="21" fill="#344b66"/>
+<text x="1583" y="296" class="connector" text-anchor="middle">A</text>
+<line x1="1552" y1="290" x2="1559" y2="290" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<circle cx="54" cy="591" r="21" fill="#344b66"/>
+<text x="54" y="597" class="connector" text-anchor="middle">A</text>
+<line x1="77" y1="591" x2="84" y2="591" stroke="#475569" stroke-width="2.4" marker-end="url(#arrow)"/>
+<text x="820" y="402" class="footer" text-anchor="middle">A → A: el flujo continúa en la fila inferior, de izquierda a derecha.</text>
+<rect x="92" y="720" width="1454" height="82" rx="10" fill="#f7f9fb" stroke="#cbd5e1" stroke-width="1.4"/>
+<text x="118" y="752" class="group" text-anchor="start">Idea principal</text>
+<text x="118" y="780" class="note" text-anchor="start">La ESP32 digitaliza y organiza las lecturas; la FPGA recibe y valida; el femtoRV32 consulta los registros para controlar el juego.</text>
+<text x="92" y="833" class="footer" text-anchor="start">Estado del proyecto: lectura inicial de X/Y/botón disponible; transmisión estructurada y receptor MMIO pendientes de implementación y prueba.</text>
+</svg>
