@@ -363,7 +363,61 @@ Esta arquitectura constituye una propuesta de diseño. Los bloques y sus conexio
 
 ### 3.4 Diagrama de flujo
 
-> **Pendiente.** Listo cuando: usa símbolos ISO 5807, cada decisión tiene salidas Sí y No, y no hay terminal de Fin en procesos cíclicos.
+
+El diagrama de flujo representa el funcionamiento del periférico joystick desde la adquisición de las señales hasta el almacenamiento de los datos en los registros del procesador. El sistema contempla dos procesos continuos: la adquisición y transmisión mediante la ESP32 y la recepción y validación de información en la FPGA.
+
+![Diagrama de flujo del joystick](diagramas/joystick_diagrama_flujo.svg)
+
+#### Inicialización del sistema
+
+Al comenzar su funcionamiento, la ESP32 carga los parámetros de calibración previamente establecidos para los ejes X e Y. Estos parámetros permitirán convertir las lecturas del ADC a valores digitales de 8 bits con signo.
+
+Por su parte, al activarse la señal `rst`, el periférico de la FPGA inicializa los registros `JOY1_DATA`, `JOY2_DATA` y `STATUS`, además de los contadores y el temporizador utilizados durante la recepción. El reinicio tiene prioridad sobre las demás operaciones.
+
+#### Adquisición y transmisión en la ESP32
+
+La ESP32 realiza continuamente las siguientes operaciones:
+
+1. Lee las señales de los ejes X e Y mediante el ADC y detecta el estado del botón.
+2. Convierte los valores de los ejes a una representación de 8 bits con signo, utilizando los parámetros de calibración establecidos.
+3. Construye un paquete de 8 bytes con los datos del joystick, identificador del jugador, número de secuencia, campo de ataque y checksum XOR.
+4. Transmite la información mediante UART a 115200 baudios, con configuración 8N1.
+5. Espera hasta el siguiente intervalo de transmisión, propuesto en aproximadamente 33,3 ms, y repite el proceso.
+
+#### Recepción y validación en la FPGA
+
+El periférico permanece a la espera de datos recibidos mediante UART y realiza las siguientes operaciones:
+
+1. Comprueba si existe un error de trama mediante `rx_frame_err`. Si se detecta, activa `UART_ERROR` en el registro `STATUS` y descarta el paquete parcial.
+2. Verifica `rx_valid` para identificar la disponibilidad de un nuevo byte.
+3. Si todavía no existe una trama en curso, busca el byte de inicio `0xAA`. Cuando lo reconoce, comienza a almacenar los bytes recibidos.
+4. Guarda cada byte y actualiza el contador de recepción hasta completar los 8 bytes.
+5. Comprueba que el identificador corresponda al jugador 1 o 2.
+6. Calcula el checksum XOR y lo compara con el byte de verificación recibido.
+7. Si el paquete es válido, actualiza el registro `JOY1_DATA` o `JOY2_DATA` y activa el indicador correspondiente `P1_VALID` o `P2_VALID`.
+8. Si el checksum es incorrecto, activa `CHECKSUM_ERROR`, descarta el paquete y conserva los últimos datos válidos.
+
+#### Control del tiempo de espera
+
+Durante la recepción se contempla un temporizador para evitar que un paquete incompleto permanezca almacenado indefinidamente.
+
+Si existe una trama parcial y transcurre un tiempo máximo `T_MAX` sin recibir el siguiente byte, el periférico descarta la información incompleta, reinicia el contador de recepción y vuelve a esperar un nuevo byte de inicio.
+
+El valor de `T_MAX` será parametrizable y deberá establecerse mediante pruebas, teniendo en cuenta los tiempos reales de transmisión UART.
+
+Este procedimiento evita que los bytes de un paquete incompleto se mezclen con los de transmisiones posteriores. La detección de este tiempo máximo no modifica los registros de datos válidos.
+
+#### Actualización de registros y funcionamiento continuo
+
+Los registros de cada jugador se actualizan únicamente después de validar un paquete completo, garantizando que sus valores correspondan a la misma transmisión.
+
+El procesador femtoRV32 podrá consultar estos registros mediante la interfaz MMIO mientras el periférico continúa recibiendo información.
+
+El diagrama utiliza símbolos convencionales de flujo: paralelogramos para entrada y salida de datos, rectángulos para procesos, rombos para decisiones y conectores para representar el retorno al ciclo de recepción.
+
+Cada decisión dispone de salidas identificadas como **Sí** y **No**. El funcionamiento es continuo, por lo que no se utiliza un terminal de «Fin».
+
+El diseño presentado corresponde a una propuesta funcional que deberá implementarse y validarse durante las etapas de descripción en Verilog y simulación.
 
 ### 3.5 Clasificación del flujo
 
