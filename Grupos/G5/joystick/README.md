@@ -485,7 +485,14 @@ Prioridad propuesta para eventos simultáneos: `rst`, `rx_frame_err`, `rx_valid`
 
 ### 4.1 Organización de módulos e implementación en Verilog
 
-> **Pendiente.** Listo cuando: hay un módulo por bloque, un módulo superior que los une, parámetros declarados y nombres iguales a los diagramas. Código en [`rtl/`](rtl/).
+> **En progreso.** El ensamblador recibe los bytes de la UART mediante `rx_data[7:0]`, `rx_valid` y `rx_frame_err`.
+
+| Archivo | Bloque | Contenido |
+|---|---|---|
+| [joystick_ensamblador.v](rtl/joystick_ensamblador.v) | Ensamblador | Guarda los seis campos, acumula su XOR y descarta paquetes parciales al vencer el plazo entre bytes. |
+| [joystick_validador.v](rtl/joystick_validador.v) | Validador | Reconoce la cabecera `0xAA`, compara el checksum y habilita la escritura para el jugador 1 o 2. |
+
+`datos_muestra[31:0]` sigue el mapa de 3.2.5. El banco de registros debe capturarlo únicamente en el flanco con `cargar_p1` o `cargar_p2` activo. `checksum_error` indica un error en el byte de verificación. El plazo inicial propuesto es de 1 ms entre bytes y se ajusta con `T_MAX_CICLOS`.
 
 ## 5. Etapa de simulación
 
