@@ -76,14 +76,14 @@ Estados posibles: `Pendiente`, `En progreso`, `Hecho`. Una sección está `Hecho
 
 | # | Sección | Joystick | Audio |
 |---|---|---|---|
-| 1 | Marco teórico | Pendiente | Hecho |
-| 2 | Fundamento | Pendiente | Hecho |
-| 3.1 | Diagrama de caja negra | Pendiente | Hecho |
-| 3.2 | Características de la interfaz | Pendiente | Hecho |
-| 3.3 | Diagrama de bloques | Pendiente | Hecho |
-| 3.4 | Diagrama de flujo | Pendiente | Hecho |
-| 3.5 | Clasificación del flujo | Pendiente | Hecho |
-| 3.6 | Máquinas de estado | Pendiente | Hecho |
+| 1 | Marco teórico | Hecho | Hecho |
+| 2 | Fundamento | Hecho | Hecho |
+| 3.1 | Diagrama de caja negra | Hecho | Hecho |
+| 3.2 | Características de la interfaz | Hecho | Hecho |
+| 3.3 | Diagrama de bloques | Hecho | Hecho |
+| 3.4 | Diagrama de flujo | Hecho | Hecho |
+| 3.5 | Clasificación del flujo | Hecho | Hecho |
+| 3.6 | Máquinas de estado | Hecho | Hecho |
 | 4.1 | Organización de módulos e implementación Verilog | Pendiente | Hecho |
 | 5.1 | Testbench, estímulos y observación | Pendiente | Hecho |
 | 6 | Implementación | Pendiente | Pendiente |
@@ -133,6 +133,19 @@ En esta sección se documentarán los principales avances, implementaciones, pru
 | 2026-11-23 | James Velasquez Boyaca | Audio: etapa de diseño (3.1 a 3.6) con ocho figuras; sección 2 ajustada a 512 ciclos por trama. | Hecho |
 | 2026-11-23 | James Velasquez Boyaca | Audio: Verilog del periférico (4.1), un módulo por bloque. | Hecho |
 | 2026-11-23 | James Velasquez Boyaca | Audio: testbench con 7 casos, Makefile y vista de GTKWave (5.1); pasa con 25 y 27 MHz. | Hecho |
+| 2026-11-09 | James Velásquez | Joystick · Crear la estructura de carpetas y el README del joystick. (`289c081`) | Hecho |
+| 2026-11-12 | jcastanedacr | Joystick · Agregar el fundamento inicial del joystick. (`eb45462`) | Hecho |
+| 2026-11-12 | jcastanedacr | Joystick · Integrar el fundamento en main mediante el PR #5. (`7d829f5`) | Hecho |
+| 2026-11-13 | James Velásquez | Joystick · Documentar el marco teórico con referencias. (`52b65c8`) | Hecho |
+| 2026-11-17 | James Velásquez | Joystick · Agregar la caja negra y el programa de lectura inicial en ESP32. (`4dd0bf9`) | Hecho |
+| 2026-11-17 | James _E | Joystick · Retirar la marca «En progreso» del marco teórico. (`b4c2937`) | Hecho |
+| 2026-11-19 | jcastanedacr | Joystick · Documentar la interfaz UART, el paquete y el mapa de registros. (`7d9c9f9`) | Hecho |
+| 2026-11-19 | jcastanedacr | Joystick · Agregar el diagrama de bloques y describir sus funciones. (`a7ec1e3`) | Hecho |
+| 2026-11-19 | jcastanedacr | Joystick · Agregar el diagrama de flujo de adquisición y recepción. (`9da7cb4`) | Hecho |
+| 2026-11-19 | jcastanedacr | Joystick · Eliminar un encabezado duplicado de la interfaz. (`9aeb6ca`) | Hecho |
+| 2026-11-19 | jcastanedacr | Joystick · Ampliar el fundamento e ilustrar el recorrido de la señal. (`b70bddf`) | Hecho |
+| 2026-11-23 | James Velásquez | Joystick · Clasificar el flujo en ruta de datos y unidad de control. (`6431614`) | Hecho |
+| 2026-11-23 | James Velásquez | Joystick · Documentar las máquinas de estado UART y de paquetes con dos diagramas. (`a84131f`) | Hecho |
 
 ## Uso de herramientas de IA
 
