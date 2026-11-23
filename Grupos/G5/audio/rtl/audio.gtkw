@@ -1,0 +1,47 @@
+[dumpfile] "tb_audio.vcd"
+[timestart] 0
+[size] 1400 760
+[signals_width] 240
+[sst_expanded] 1
+[sst_vpaned_height] 220
+@200
+-Bus del procesador
+@28
+tb_audio.clk
+tb_audio.rst
+tb_audio.cs
+tb_audio.wr
+tb_audio.rd
+@22
+tb_audio.addr[3:0]
+tb_audio.d_in[31:0]
+tb_audio.d_out[31:0]
+@28
+tb_audio.ack
+@200
+-Registros y muestra
+@24
+tb_audio.dut.freq[15:0]
+tb_audio.dut.vol[6:0]
+@28
+tb_audio.dut.enable
+@22
+tb_audio.dut.u_nco.fase[15:0]
+tb_audio.dut.muestra[7:0]
+@200
+-Tiempos y control
+@24
+tb_audio.dut.u_tiempos.cnt_bclk[3:0]
+tb_audio.dut.cnt_bit[4:0]
+@28
+tb_audio.dut.tick_bajada
+tb_audio.dut.carga
+tb_audio.dut.u_i2s.estado
+@200
+-Salida I2S
+@28
+tb_audio.audio_bclk
+tb_audio.audio_lrclk
+tb_audio.audio_din
+@22
+tb_audio.dut.u_i2s.desplaza[31:0]

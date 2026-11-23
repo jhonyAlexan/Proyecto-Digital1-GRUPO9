@@ -431,7 +431,35 @@ La muestra se calcula con la fase del mismo ciclo en que se guarda (`fase + FREQ
 
 ### 5.1 Entorno de prueba: testbench, estímulos y observación
 
-> **Pendiente.** Listo cuando: se prueban casos normales y de borde, y las formas de onda de GTKWave están explicadas con resultado esperado contra obtenido.
+> **Hecho.** Listo cuando: se prueban casos normales y de borde, y las formas de onda de GTKWave están explicadas con resultado esperado contra obtenido.
+
+El testbench [`tb_audio.v`](rtl/tb_audio.v) prueba el periférico completo con un reloj de 25 MHz. No hay que mirar las ondas para saber si funciona: incluye un receptor I2S de referencia que lee DIN igual que el MAX98357A, revisa solo los criterios de 2.5 y al final imprime `PASA` o `NO PASA`.
+
+```bash
+cd Grupos/G5/audio/rtl
+make        # compila con Icarus Verilog y simula
+make wave   # abre GTKWave con las señales ya ordenadas (audio.gtkw)
+```
+
+| # | Caso | Estímulo | Esperado | Obtenido |
+|---|---|---|---|---|
+| 1 | Reset | `rst` = 1 | BCLK, LRCLK y DIN en 0 | Igual |
+| 2 | Registros | Escribe FREQ = 591, VOL = 64 y CONTROL = 1; lee los tres y el offset `0xC` | Se leen los valores escritos, `0xC` se lee 0 y `ack` llega un ciclo después de `cs` | Igual |
+| 3 | Tiempos | Todos los flancos de la simulación | BCLK de 16 ciclos al 50 %; trama de 512 ciclos; 16 bits por slot; LRCLK y DIN cambian solo en la bajada de BCLK | Igual en todos los flancos |
+| 4 | Tono de 440 Hz | FREQ = 591 y VOL = 64 durante 1200 tramas | Muestras de +64 o −64; f = 440,33 Hz | +64 o −64; 110,90 tramas por período, f = 440,29 Hz |
+| 5 | Borde | VOL = 127 y FREQ = 32768 | La muestra alterna +127 y −127 en cada trama | Igual (figura 9) |
+| 6 | Silencio | CONTROL = 0 | DIN en 0 en todos los bits | Igual |
+| 7 | Reset a mitad de trama | `rst` = 1 con el tono sonando | Las salidas vuelven al reposo | Igual |
+
+Resultado: 93 613 comprobaciones, 0 fallas. Con `CICLOS_BCLK` = 18 (reloj de 27 MHz) el mismo testbench también pasa.
+
+En el caso 4, la diferencia entre 440,29 Hz y 440,33 Hz viene de la medición, no del diseño. El testbench cuenta tramas enteras entre subidas de la onda, y en 10 períodos eso da una resolución cercana a 0,4 Hz.
+
+![Simulación de dos tramas](diagramas/fig9_simulacion.png)
+
+*Figura 9. Dos tramas del caso 5, tomadas de `tb_audio.vcd`. Cada `carga` mete una muestra nueva en el registro de desplazamiento: +127 (`0x7F`) sale por DIN como `0111 1111` y −127 (`0x81`) como `1000 0001`, seguidos de ocho ceros. LRCLK cambia un BCLK antes del primer bit de cada slot.*
+
+Para ver lo mismo en GTKWave, abre `make wave`, busca la escritura de FREQ = 32768 hacia el final de la simulación y amplía dos tramas. La vista `audio.gtkw` agrupa las señales en cuatro bloques: bus, registros y muestra, tiempos y control, y salida I2S.
 
 ## 6. Etapa de implementación
 

@@ -85,7 +85,7 @@ Estados posibles: `Pendiente`, `En progreso`, `Hecho`. Una sección está `Hecho
 | 3.5 | Clasificación del flujo | Pendiente | Hecho |
 | 3.6 | Máquinas de estado | Pendiente | Hecho |
 | 4.1 | Organización de módulos e implementación Verilog | Pendiente | Hecho |
-| 5.1 | Testbench, estímulos y observación | Pendiente | Pendiente |
+| 5.1 | Testbench, estímulos y observación | Pendiente | Hecho |
 | 6 | Implementación | Pendiente | Pendiente |
 
 ## Preguntas abiertas
@@ -132,6 +132,7 @@ En esta sección se documentarán los principales avances, implementaciones, pru
 |---|---|---|---|
 | 2026-11-23 | James Velasquez Boyaca | Audio: etapa de diseño (3.1 a 3.6) con ocho figuras; sección 2 ajustada a 512 ciclos por trama. | Hecho |
 | 2026-11-23 | James Velasquez Boyaca | Audio: Verilog del periférico (4.1), un módulo por bloque. | Hecho |
+| 2026-11-23 | James Velasquez Boyaca | Audio: testbench con 7 casos, Makefile y vista de GTKWave (5.1); pasa con 25 y 27 MHz. | Hecho |
 
 ## Uso de herramientas de IA
 
