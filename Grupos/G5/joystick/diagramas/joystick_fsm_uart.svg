@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 670">
+<title>Receptor UART · 8N1</title>
+<defs><marker id="flecha" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8Z" fill="#476879"/></marker></defs>
+<rect width="900" height="670" rx="16" fill="#f7fafb"/>
+<g font-family="DejaVu Sans, sans-serif">
+<text x="30" y="42" font-size="26" fill="#203d4d" font-weight="bold">Receptor UART · 8N1</text>
+<text x="30" y="74" font-size="15" fill="#203d4d" font-weight="normal">Estado actual</text>
+<text x="278" y="74" font-size="15" fill="#203d4d" font-weight="normal">Condición</text>
+<text x="640" y="74" font-size="15" fill="#203d4d" font-weight="normal">Estado siguiente</text>
+<rect x="28" y="88" width="210" height="82" rx="12" fill="#def2ec" stroke="#36766a"/>
+<text x="44" y="136" font-size="19" fill="#203d4d" font-weight="bold">REPOSO</text>
+<text x="278" y="134" font-size="16" fill="#203d4d" font-weight="normal">RX sincronizada en bajo</text>
+<path d="M570 129h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="134" font-size="17" fill="#203d4d" font-weight="bold">INICIO</text>
+<rect x="28" y="196" width="210" height="82" rx="12" fill="#def2ec" stroke="#36766a"/>
+<text x="44" y="244" font-size="19" fill="#203d4d" font-weight="bold">INICIO</text>
+<text x="278" y="224" font-size="16" fill="#203d4d" font-weight="normal">A medio bit: RX baja</text>
+<path d="M570 219h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="224" font-size="17" fill="#203d4d" font-weight="bold">DATOS</text>
+<text x="278" y="260" font-size="16" fill="#203d4d" font-weight="normal">A medio bit: RX alta</text>
+<path d="M570 255h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="260" font-size="17" fill="#203d4d" font-weight="bold">REPOSO</text>
+<rect x="28" y="304" width="210" height="82" rx="12" fill="#def2ec" stroke="#36766a"/>
+<text x="44" y="352" font-size="19" fill="#203d4d" font-weight="bold">DATOS</text>
+<text x="278" y="332" font-size="16" fill="#203d4d" font-weight="normal">Captura de los bits 0 a 6</text>
+<path d="M570 327h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="332" font-size="17" fill="#203d4d" font-weight="bold">DATOS</text>
+<text x="278" y="368" font-size="16" fill="#203d4d" font-weight="normal">Captura del bit 7</text>
+<path d="M570 363h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="368" font-size="17" fill="#203d4d" font-weight="bold">PARADA</text>
+<rect x="28" y="412" width="210" height="82" rx="12" fill="#def2ec" stroke="#36766a"/>
+<text x="44" y="460" font-size="19" fill="#203d4d" font-weight="bold">PARADA</text>
+<text x="278" y="440" font-size="16" fill="#203d4d" font-weight="normal">RX alta: emitir rx_valid</text>
+<path d="M570 435h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="440" font-size="17" fill="#203d4d" font-weight="bold">REPOSO</text>
+<text x="278" y="476" font-size="16" fill="#203d4d" font-weight="normal">RX baja: emitir rx_frame_err</text>
+<path d="M570 471h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="476" font-size="17" fill="#203d4d" font-weight="bold">RECUPERAR</text>
+<rect x="28" y="520" width="210" height="82" rx="12" fill="#def2ec" stroke="#36766a"/>
+<text x="44" y="568" font-size="19" fill="#203d4d" font-weight="bold">RECUPERAR</text>
+<text x="278" y="566" font-size="16" fill="#203d4d" font-weight="normal">RX vuelve a alto</text>
+<path d="M570 561h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="566" font-size="17" fill="#203d4d" font-weight="bold">REPOSO</text>
+<text x="30" y="648" font-size="15" fill="#203d4d" font-weight="normal">rst → REPOSO desde cualquier estado. Entre instantes de muestreo se conserva el estado.</text>
+</g></svg>

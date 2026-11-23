@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 454">
+<title>Ensamblador · paquete de ocho bytes</title>
+<defs><marker id="flecha" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8Z" fill="#476879"/></marker></defs>
+<rect width="900" height="454" rx="16" fill="#f7fafb"/>
+<g font-family="DejaVu Sans, sans-serif">
+<text x="30" y="42" font-size="26" fill="#203d4d" font-weight="bold">Ensamblador · paquete de ocho bytes</text>
+<text x="30" y="74" font-size="15" fill="#203d4d" font-weight="normal">Estado actual</text>
+<text x="278" y="74" font-size="15" fill="#203d4d" font-weight="normal">Condición</text>
+<text x="640" y="74" font-size="15" fill="#203d4d" font-weight="normal">Estado siguiente</text>
+<rect x="28" y="88" width="210" height="82" rx="12" fill="#def2ec" stroke="#36766a"/>
+<text x="44" y="136" font-size="19" fill="#203d4d" font-weight="bold">BUSCAR</text>
+<text x="278" y="134" font-size="16" fill="#203d4d" font-weight="normal">Byte válido igual a 0xAA</text>
+<path d="M570 129h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="134" font-size="17" fill="#203d4d" font-weight="bold">CAMPOS</text>
+<rect x="28" y="196" width="210" height="82" rx="12" fill="#def2ec" stroke="#36766a"/>
+<text x="44" y="244" font-size="19" fill="#203d4d" font-weight="bold">CAMPOS</text>
+<text x="278" y="224" font-size="16" fill="#203d4d" font-weight="normal">Byte válido en posición 1 a 5</text>
+<path d="M570 219h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="224" font-size="17" fill="#203d4d" font-weight="bold">CAMPOS</text>
+<text x="278" y="260" font-size="16" fill="#203d4d" font-weight="normal">Byte válido en posición 6</text>
+<path d="M570 255h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="260" font-size="17" fill="#203d4d" font-weight="bold">CHECKSUM</text>
+<rect x="28" y="304" width="210" height="82" rx="12" fill="#def2ec" stroke="#36766a"/>
+<text x="44" y="352" font-size="19" fill="#203d4d" font-weight="bold">CHECKSUM</text>
+<text x="278" y="350" font-size="16" fill="#203d4d" font-weight="normal">Byte 7: decidir y cerrar paquete</text>
+<path d="M570 345h48" stroke="#476879" stroke-width="2" marker-end="url(#flecha)"/>
+<text x="640" y="350" font-size="17" fill="#203d4d" font-weight="bold">BUSCAR</text>
+<text x="30" y="432" font-size="15" fill="#203d4d" font-weight="normal">rst o error de trama → BUSCAR. En un paquete parcial, el vencimiento también devuelve a BUSCAR.</text>
+</g></svg>

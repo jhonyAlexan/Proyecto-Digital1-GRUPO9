@@ -457,7 +457,29 @@ El reinicio síncrono `rst`, activo en alto, tiene prioridad: inicializa los reg
 
 ### 3.6 Máquinas de estado
 
-> **Pendiente.** Listo cuando: cada máquina tiene estado de reset, transiciones con su condición y las salidas de cada estado.
+El receptor UART reconstruye bytes. El ensamblador interpreta el paquete de ocho bytes de la sección 3.2.3. Ambas máquinas cambian de estado en el flanco ascendente de `clk`. El reinicio síncrono `rst`, activo en alto, tiene prioridad.
+
+#### Receptor UART 8N1
+
+![Transiciones del receptor UART](diagramas/joystick_fsm_uart.svg)
+
+**REPOSO** espera que la entrada sincronizada baje. **INICIO** confirma el nivel bajo a medio bit. **DATOS** captura los ocho bits, del menos al más significativo, separados por un período de bit. **PARADA** muestrea un período después del bit 7. Si la línea está alta, publica `rx_data[7:0]` y activa `rx_valid` durante un ciclo. Si está baja, activa `rx_frame_err` durante un ciclo. **RECUPERAR** espera el retorno a nivel alto. El reinicio devuelve el receptor a **REPOSO** y borra los pulsos de salida.
+
+#### Ensamblador de paquetes
+
+![Transiciones del ensamblador de paquetes](diagramas/joystick_fsm_paquete.svg)
+
+**BUSCAR** acepta la cabecera `0xAA` cuando `rx_valid` está activo, inicializa el índice en 1 y pone el XOR en cero. **CAMPOS** guarda los bytes 1 a 6 y acumula su XOR. Un `0xAA` en esos campos se procesa como dato. **CHECKSUM** compara el byte 7 con el XOR acumulado y vuelve a **BUSCAR**.
+
+| Condición | Efecto en los registros |
+|---|---|
+| XOR correcto y jugador 1 o 2 | Escribe la muestra completa en `JOY1_DATA` o `JOY2_DATA` en un flanco de `clk` y activa `P1_VALID` o `P2_VALID`, respectivamente. |
+| XOR incorrecto | Activa `CHECKSUM_ERROR` y conserva las muestras. |
+| XOR correcto y jugador inválido | Descarta la muestra y conserva los registros y las banderas. |
+| `rx_frame_err` en cualquier estado | Activa `UART_ERROR`, descarta la recepción en curso y vuelve a **BUSCAR**. |
+| Vence `T_MAX` entre bytes de un paquete | Descarta el paquete parcial y vuelve a **BUSCAR**. Conserva las muestras y las banderas. |
+
+Prioridad propuesta para eventos simultáneos: `rst`, `rx_frame_err`, `rx_valid` y vencimiento. Cada byte aceptado reinicia el plazo mientras el paquete siga abierto. Sin evento, el ensamblador conserva su estado. Las banderas de `STATUS` permanecen activas hasta `rst`.
 
 ## 4. Etapa de descripción en HDL
 
