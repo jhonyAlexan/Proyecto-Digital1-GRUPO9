@@ -444,7 +444,16 @@ El diseño presentado corresponde a una propuesta funcional que deberá implemen
 
 ### 3.5 Clasificación del flujo
 
-> **Pendiente.** Listo cuando: los pasos están separados en ruta de datos y unidad de control (por confirmar con la guía).
+La ESP32 adquiere los ejes y el botón y transmite el paquete. En la FPGA, la **ruta de datos** reúne, transforma y almacena la información. La **unidad de control** decide cuándo capturar un byte, descartar un paquete o actualizar un registro.
+
+| Etapa en la FPGA | Ruta de datos | Unidad de control |
+|---|---|---|
+| Recepción UART | Dos flip-flops sincronizan `uart_rx` con `clk`. Un registro de desplazamiento reúne los ocho bits en `rx_data[7:0]`. | Detecta el bit de inicio, temporiza el muestreo y comprueba el bit de parada. Indica byte disponible con `rx_valid` o error de trama con `rx_frame_err`. |
+| Ensamblado | Almacena los campos, cuenta los bytes y acumula el XOR de los bytes 1 a 6. Un temporizador mide la espera entre bytes. | En espera, reconoce `0xAA` como inicio. Durante la recepción, cada `rx_valid` habilita la captura del siguiente byte y reinicia la espera. Si vence `T_MAX` o se detecta `rx_frame_err`, descarta el paquete parcial. |
+| Validación y escritura | Compara el identificador con 1 y 2, compara el XOR con el byte 7 y agrupa los campos según el mapa de 3.2.5. | Si el paquete está completo y ambas comprobaciones pasan, habilita la escritura de la muestra completa en `JOY1_DATA` o `JOY2_DATA` en un solo flanco de `clk`. Un descarte conserva las últimas muestras válidas. |
+| Estado y lectura MMIO | `STATUS` almacena las banderas. Un multiplexor entrega el registro seleccionado en `d_out[31:0]`. | Al aceptar una muestra, activa `P1_VALID` o `P2_VALID`. Un error de trama activa `UART_ERROR` y un checksum incorrecto activa `CHECKSUM_ERROR`. Con `cs` y `rd` activos, `addr` selecciona el registro de lectura. |
+
+El reinicio síncrono `rst`, activo en alto, tiene prioridad: inicializa los registros y devuelve la lógica de recepción a la espera de inicio. Las banderas de `STATUS` permanecen activas hasta el reinicio. Mientras se ensambla un paquete, el procesador puede leer la última muestra válida.
 
 ### 3.6 Máquinas de estado
 
