@@ -308,9 +308,7 @@ Codificación: 3 bits (IDLE = 0, INIT1 = 1, INIT2 = 2, SHIFT = 3, LATCH = 4, DIS
 - Bajar `EN` no corta la fila en curso: la decisión se toma en el último tick de DISPLAY (T7 o T8). Subir `EN` desde IDLE repite la configuración del driver.
 - El barrido es autónomo: el procesador solo escribe registros y el framebuffer.
 
-> Uso de IA: la figura 12 y el texto de la sección 9 se elaboraron con ayuda de un asistente de IA (Claude) a partir del ASMD y de la tabla de transferencias.
 
-```markdown
 ### 10. Integración al SoC con FemtoRV32 Quark
 
 La guía `uart-riscv.pdf` conecta los periféricos al procesador con un `chip_select` que decodifica `mem_addr[31:16]`: cada periférico ocupa una región `0x00XX`. Las direcciones `0x1000_0000` y `0x2000_0000` que se habían acordado con G2 no se pueden decodificar con ese esquema, por eso G4 pasa a una región propia.
@@ -362,16 +360,6 @@ La guía usa `START`, `BUSY` y `DONE` para periféricos que hacen una operación
 | `DONE` | `FRAME` (contador retenido) | No hay fin de operación. El evento útil es "terminó un cuadro": `FRAME` aumenta en 1 al terminar la fila 31 y se conserva. A diferencia de un pulso de un ciclo, el CPU no pierde el evento aunque lea tarde: compara con el valor que leyó antes. |
 
 Escribir píxeles durante el barrido: la escritura usa un puerto de la memoria y el barrido el otro, en el mismo ciclo y sin espera. Copiar una imagen completa son 4096 `sw`; con un lazo de unas 4 instrucciones por píxel y del orden de 4 ciclos por instrucción en Quark serían unos 65 000 ciclos, ≈ 2,4 ms a 27 MHz, dentro de los 16,7 ms de un cuadro a 60 FPS. Esta cifra es una estimación y se debe medir en la integración.
-```
---
---
---
---
---
-
-
-
-
 
 
 
@@ -396,7 +384,7 @@ Cómo simular (Icarus Verilog y GTKWave), desde `Grupos/G4/`:
     make sim-regs     # banco de registros
     make wave-core    # abre la simulación del core en GTKWave
     make clean
-
+```
 ---
 ### Referencias
 - Guía del curso: UART 8N1, control combinacional y actualización conjunta en subida, e integración con FemtoRV32 Quark (uart-riscv.pdf).
