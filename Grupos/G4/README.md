@@ -310,6 +310,70 @@ Codificación: 3 bits (IDLE = 0, INIT1 = 1, INIT2 = 2, SHIFT = 3, LATCH = 4, DIS
 
 > Uso de IA: la figura 12 y el texto de la sección 9 se elaboraron con ayuda de un asistente de IA (Claude) a partir del ASMD y de la tabla de transferencias.
 
+```markdown
+### 10. Integración al SoC con FemtoRV32 Quark
+
+La guía `uart-riscv.pdf` conecta los periféricos al procesador con un `chip_select` que decodifica `mem_addr[31:16]`: cada periférico ocupa una región `0x00XX`. Las direcciones `0x1000_0000` y `0x2000_0000` que se habían acordado con G2 no se pueden decodificar con ese esquema, por eso G4 pasa a una región propia.
+
+#### 10.1 Región y mapa de registros
+
+El periférico ocupa la región `0x0044` (`0x0044_0000` a `0x0044_FFFF`), que está libre en el SoC de la guía (`CHIP4ADDR`, `cs[4]`). G5 audio usa `0x0043`. Dentro de la región solo se usa `addr[15:0]`.
+
+| Dirección | Acceso | Registro | Contenido |
+|---|---|---|---|
+| `0x0044_0000` | RW | `CONTROL` | bit 0 `EN`: 1 configura el panel y barre; 0 apaga al terminar la fila en curso |
+| `0x0044_0004` | RW | `BRIGHT` | `[9:0]` ticks con `OE` activo en cada fila (reset 512) |
+| `0x0044_0008` | R | `STATUS` | bit 0 `BUSY`: el barrido está activo (estado ≠ IDLE) |
+| `0x0044_000C` | — | reservado | se lee 0 |
+| `0x0044_0010` | R | `FRAME` | cuadros completos mostrados (32 bits) |
+| `0x0044_4000` a `0x0044_7FFC` | W | `FB` | píxel (x, y) en `0x0044_4000 + 4·(64·y + x)`; `d_in[2:0] = {R, G, B}`; se lee 0 |
+
+Reglas:
+- Todos los accesos son de palabra (`sw`, `lw`). Una escritura solo tiene efecto si `wmask[0] = 1`; los bits de `d_in` que no usa el registro se ignoran.
+- Escribir en `STATUS`, `FRAME` o un offset reservado no tiene efecto; leer un offset reservado o la ventana del framebuffer devuelve 0.
+- `rst` deja `EN = 0`, `BRIGHT = 512` y `FRAME = 0`. No borra la imagen.
+- En la ventana, `addr[13:2] = {y[5:0], x[5:0]}` es la dirección del píxel; `y[5]` (bit 13) elige la memoria de las filas 32 a 63. Ejemplo: el píxel (10, 40) está en `0x0044_4000 + 4·(64·40 + 10) = 0x0044_6828`.
+
+Cambios respecto al mapa de la Entrega 1:
+- `PIXEL_ADDR` y `PIXEL_DATA` se reemplazan por la ventana `FB`. Cada píxel tiene su propia dirección y se escribe con un solo `sw`. Antes había que escribir la dirección y después el dato, y el autoincremento hacía que el resultado dependiera de los accesos anteriores.
+- Se agrega `STATUS.BUSY` para que el programa sepa si el barrido está activo.
+- El framebuffer vuelve a estar dentro del periférico. G2 ya no tiene que implementar `FRAMEBUFFER_BRAM`.
+
+Uso desde C:
+
+    #define HUB75_BASE    0x00440000u
+    #define HUB75_CONTROL (*(volatile uint32_t *)(HUB75_BASE + 0x00))
+    #define HUB75_BRIGHT  (*(volatile uint32_t *)(HUB75_BASE + 0x04))
+    #define HUB75_STATUS  (*(volatile uint32_t *)(HUB75_BASE + 0x08))
+    #define HUB75_FRAME   (*(volatile uint32_t *)(HUB75_BASE + 0x10))
+    #define HUB75_FB      ((volatile uint32_t *)(HUB75_BASE + 0x4000))
+
+    HUB75_FB[64 * y + x] = color;   // color = {R,G,B} en los bits 2..0
+    HUB75_CONTROL = 1;              // configurar el panel y barrer
+
+#### 10.2 Semántica de EN, BUSY y FRAME
+
+La guía usa `START`, `BUSY` y `DONE` para periféricos que hacen una operación y terminan, como el transmisor UART. El barrido HUB75 no termina: una vez habilitado, refresca el panel sin parar. Por eso:
+
+| Guía | En G4 | Comportamiento |
+|---|---|---|
+| `START` | `CONTROL.EN` (nivel) | Escribir `EN = 1` en reposo arranca la configuración del driver (INIT1, INIT2) en el siguiente tick y después barre sin fin. Escribir `EN = 0` apaga el panel al terminar la fila en curso. No es un pulso: se lee de vuelta. |
+| `BUSY` | `STATUS.BUSY` = estado ≠ IDLE | Sube en el primer tick después de `EN = 1`. Con `EN = 0` baja al terminar la fila en curso (como mucho 85,41 µs). No bloquea nada: se pueden escribir píxeles con `BUSY = 1`. |
+| `DONE` | `FRAME` (contador retenido) | No hay fin de operación. El evento útil es "terminó un cuadro": `FRAME` aumenta en 1 al terminar la fila 31 y se conserva. A diferencia de un pulso de un ciclo, el CPU no pierde el evento aunque lea tarde: compara con el valor que leyó antes. |
+
+Escribir píxeles durante el barrido: la escritura usa un puerto de la memoria y el barrido el otro, en el mismo ciclo y sin espera. Copiar una imagen completa son 4096 `sw`; con un lazo de unas 4 instrucciones por píxel y del orden de 4 ciclos por instrucción en Quark serían unos 65 000 ciclos, ≈ 2,4 ms a 27 MHz, dentro de los 16,7 ms de un cuadro a 60 FPS. Esta cifra es una estimación y se debe medir en la integración.
+```
+--
+--
+--
+--
+--
+
+
+
+
+
+
 
 ### 11. RTL y verificación
 
