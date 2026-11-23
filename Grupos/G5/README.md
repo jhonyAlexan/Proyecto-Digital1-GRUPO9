@@ -76,14 +76,14 @@ Estados posibles: `Pendiente`, `En progreso`, `Hecho`. Una sección está `Hecho
 
 | # | Sección | Joystick | Audio |
 |---|---|---|---|
-| 1 | Marco teórico | Pendiente | Pendiente |
-| 2 | Fundamento | Pendiente | Pendiente |
-| 3.1 | Diagrama de caja negra | Pendiente | Pendiente |
-| 3.2 | Características de la interfaz | Pendiente | Pendiente |
-| 3.3 | Diagrama de bloques | Pendiente | Pendiente |
-| 3.4 | Diagrama de flujo | Pendiente | Pendiente |
-| 3.5 | Clasificación del flujo | Pendiente | Pendiente |
-| 3.6 | Máquinas de estado | Pendiente | Pendiente |
+| 1 | Marco teórico | Pendiente | Hecho |
+| 2 | Fundamento | Pendiente | Hecho |
+| 3.1 | Diagrama de caja negra | Pendiente | Hecho |
+| 3.2 | Características de la interfaz | Pendiente | Hecho |
+| 3.3 | Diagrama de bloques | Pendiente | Hecho |
+| 3.4 | Diagrama de flujo | Pendiente | Hecho |
+| 3.5 | Clasificación del flujo | Pendiente | Hecho |
+| 3.6 | Máquinas de estado | Pendiente | Hecho |
 | 4.1 | Organización de módulos e implementación Verilog | Pendiente | Pendiente |
 | 5.1 | Testbench, estímulos y observación | Pendiente | Pendiente |
 | 6 | Implementación | Pendiente | Pendiente |
@@ -111,9 +111,12 @@ Dudas que deben resolverse con las guías o con el profesor. Se marcan al quedar
 - [ ] Formato definitivo del paquete y frecuencia de envío, según lo que necesite el software del juego.
 
 **Sobre el audio**
-- [ ] Hardware de salida: parlante, amplificador y método de generación (PWM, DAC u otro).
-- [ ] Qué necesita el juego: tonos simples, notas, efectos o volumen.
-- [ ] Registros que escribe el procesador.
+- [x] Hardware de salida: parlante, amplificador y método de generación (PWM, DAC u otro).
+  Respuesta: I2S hacia el amplificador MAX98357A y parlante de 4 a 8 Ω (audio, 1.7 y 3.2).
+- [x] Qué necesita el juego: tonos simples, notas, efectos o volumen.
+  Respuesta: tonos de onda cuadrada con frecuencia y volumen programables (audio, 2.1).
+- [x] Registros que escribe el procesador.
+  Respuesta: FREQ, VOL y CONTROL desde 0x00430000 (audio, 2.4 y 3.2).
 
 ## Convenciones del equipo
 
