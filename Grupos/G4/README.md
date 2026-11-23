@@ -363,6 +363,19 @@ Escribir píxeles durante el barrido: la escritura usa un puerto de la memoria y
 
 
 
+
+
+#### 10.4 Tiempos del handshake entre el bus y el core
+
+![Tiempos del handshake](fig14a-b.png)
+
+Figura 14: (a) Escritura de `EN = 1`: Quark pone dirección, dato y máscara durante un ciclo; `enable` se carga en el flanco k+1; el core pasa de IDLE a INIT1 en el primer tick con `EN = 1` (aquí k+3; según la fase del tick, uno o dos ciclos después de k+1) y desde ese flanco `BUSY = 1`. (b) Lectura de `STATUS`: la solicitud `cs ∧ rd` dura un ciclo (EXEC); el periférico captura la respuesta en k+1 y la conserva; Quark la usa en la fase WAIT.
+
+- Escritura de un píxel: igual que (a) hasta k+1; en ese flanco el píxel queda en la memoria. El barrido lo muestra la próxima vez que pase por esa fila.
+- Ninguna operación necesita esperar al core: no hay señales de espera (`mem_rbusy = mem_wbusy = 0`, como en la guía).
+- Latencias: `enable` 1 ciclo; `BUSY` de 1 a `CLK_DIV` ciclos más; apagado (`BUSY = 0` tras `EN = 0`) hasta una fila, 85,41 µs.
+
+
 ### 11. RTL y verificación
 
 El RTL sigue la división de las secciones 7 a 9: un módulo por bloque, con los mismos nombres de señales del ASMD y de la tabla de transferencias.
