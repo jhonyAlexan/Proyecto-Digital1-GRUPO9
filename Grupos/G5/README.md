@@ -84,7 +84,7 @@ Estados posibles: `Pendiente`, `En progreso`, `Hecho`. Una sección está `Hecho
 | 3.4 | Diagrama de flujo | Pendiente | Hecho |
 | 3.5 | Clasificación del flujo | Pendiente | Hecho |
 | 3.6 | Máquinas de estado | Pendiente | Hecho |
-| 4.1 | Organización de módulos e implementación Verilog | Pendiente | Pendiente |
+| 4.1 | Organización de módulos e implementación Verilog | Pendiente | Hecho |
 | 5.1 | Testbench, estímulos y observación | Pendiente | Pendiente |
 | 6 | Implementación | Pendiente | Pendiente |
 
@@ -130,4 +130,9 @@ En esta sección se documentarán los principales avances, implementaciones, pru
 
 | Fecha | Integrante(s) | Descripción del aporte | Estado |
 |---|---|---|---|
-| | | | En desarrollo |
+| 2026-11-23 | James Velasquez Boyaca | Audio: etapa de diseño (3.1 a 3.6) con ocho figuras; sección 2 ajustada a 512 ciclos por trama. | Hecho |
+| 2026-11-23 | James Velasquez Boyaca | Audio: Verilog del periférico (4.1), un módulo por bloque. | Hecho |
+
+## Uso de herramientas de IA
+
+El equipo usa asistentes de IA (Claude y ChatGPT) como apoyo para redactar, dibujar figuras y proponer código. Cada aporte lo revisa y lo sube un integrante, que responde por su contenido. Los commits hechos con esa ayuda lo indican con la línea `Co-Authored-By` del mensaje.

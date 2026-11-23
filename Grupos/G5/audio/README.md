@@ -403,7 +403,29 @@ LRCLK cambia en los bits 14 y 30, un BCLK antes del MSB de cada palabra (bits 0 
 
 ### 4.1 Organización de módulos e implementación en Verilog
 
-> **Pendiente.** Listo cuando: hay un módulo por bloque, un módulo superior que los une, parámetros declarados y nombres iguales a los diagramas. Código en [`rtl/`](rtl/).
+> **Hecho.** Listo cuando: hay un módulo por bloque, un módulo superior que los une, parámetros declarados y nombres iguales a los diagramas. Código en [`rtl/`](rtl/).
+
+Cada bloque de la figura 6 es un módulo, y `peripheral_audio` los une. Todos son síncronos, con reset síncrono activo en alto, y las señales se llaman igual que en las figuras 6 a 8.
+
+| Archivo | Bloque | Contenido |
+|---|---|---|
+| [`peripheral_audio.v`](rtl/peripheral_audio.v) | Módulo superior | Instancia los cuatro bloques y declara el parámetro `CICLOS_BCLK` |
+| [`audio_regs.v`](rtl/audio_regs.v) | `audio_regs` | FREQ, VOL y CONTROL; escritura y lectura según `addr[3:2]`; `ack` un ciclo después de `cs` |
+| [`audio_tiempos.v`](rtl/audio_tiempos.v) | `audio_tiempos` | Contadores `cnt_bclk` y `cnt_bit`, salida `audio_bclk`, avisos `tick_bajada` y `carga` |
+| [`audio_nco.v`](rtl/audio_nco.v) | `audio_nco` | Fase de 16 bits que avanza FREQ en cada `carga`; muestra ±VOL o 0 |
+| [`i2s_tx.v`](rtl/i2s_tx.v) | `i2s_tx` | Máquina IZQ/DER (salida `audio_lrclk`) y registro de 32 bits (salida `audio_din`) |
+
+La única diferencia entre placas es el parámetro. En el SoC el periférico se instancia así:
+
+```verilog
+peripheral_audio #(.CICLOS_BCLK(16)) audio (   // 16 con clk = 25 MHz; 18 con 27 MHz
+    .clk(clk), .rst(rst), .cs(cs_audio), .rd(rd), .wr(wr), .addr(addr[3:0]),
+    .d_in(d_in), .d_out(d_out_audio), .ack(ack_audio),
+    .audio_bclk(audio_bclk), .audio_lrclk(audio_lrclk), .audio_din(audio_din)
+);
+```
+
+La muestra se calcula con la fase del mismo ciclo en que se guarda (`fase + FREQ`). Por eso la muestra nueva entra al registro de desplazamiento sin un ciclo de retraso. El testbench que comprueba los criterios de 2.5 está en 5.1.
 
 ## 5. Etapa de simulación
 
