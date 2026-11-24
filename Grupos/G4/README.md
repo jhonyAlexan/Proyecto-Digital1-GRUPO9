@@ -398,6 +398,28 @@ Cómo simular (Icarus Verilog y GTKWave), desde `Grupos/G4/`:
     make wave-core    # abre la simulación del core en GTKWave
     make clean
 ```
+
+#### 11.1 Banco del core
+
+`rtl/tb/tb_hub75_core.v` conecta el core a un **panel virtual**: guarda los seis bits en cada subida de `CLK`, copia la fila en cada bajada de `LAT` y cuenta cuántos pulsos de `CLK` hubo con `LAT = 1`. Así distingue un latch de datos (0 pulsos) de una palabra de configuración (11 o 12). Usa `DT = 16` para que la simulación sea corta. Cada comprobación sale de una fila de la tabla de transferencias:
+
+| Criterio | Fila de la tabla | Qué se comprueba | Resultado |
+|---|---|---|---|
+| R | R, H1 | Tras reset `OE = 1`, `LAT = 0`, `CLK = 1`; sin `EN` no hay pulsos; al bajar `EN` vuelve a IDLE con `OE = 1` y `FRAME` se detiene | PASS |
+| T1–T4 | T1–T4 en INIT1 e INIT2 | Un registro 1 (11 pulsos con `LAT`) y un registro 2 (12), cada uno tras 64 pulsos, con el patrón correcto en las 64 posiciones | PASS |
+| T2–T4 | T2–T4 en SHIFT | 64 pulsos de `CLK` antes de cada latch; nunca sube `CLK` con `OE` activo | PASS (32 filas) |
+| T5 | T5 | `ROW` solo cambia con `OE = 1`; latch de datos con 0 pulsos durante `LAT = 1` | PASS |
+| T6 | T6 | `BRIGHT = 5` → `OE` activo 5 ticks; `BRIGHT = 1000` y `DT = 16` → 15 ticks | PASS |
+| T7 | T7, T8 | Periodo de fila = (128 + 1 + DT) ticks = 290 ciclos; `FRAME` cambia solo después de la fila 31 | PASS (31 periodos medidos) |
+| Imagen | todas | Los 4096 píxeles reconstruidos por el panel virtual coinciden con los escritos | PASS |
+
+Para comprobar que el banco detecta errores se introdujeron fallas a propósito en una copia del core: zona de `LAT` en `col ≥ 54`, `OE` siempre activo en DISPLAY y las mitades del framebuffer intercambiadas. Las tres hacen fallar el banco.
+
+![Simulación del core](img/gtkwave_fila_g4.png)
+
+Figura 15: Cambio de fila en GTKWave (`DT = 16`, `BRIGHT = 5`): últimas columnas de SHIFT, `last_col` y `clear_col` en la columna 63, el tick de LATCH con `lat` alto y `load_row`, DISPLAY con `cnt` de 0 a 15 y `oe` activo los primeros 5 ticks, y el paso a la fila siguiente con `inc_row`.
+
+> Uso de IA: el RTL y el banco se elaboraron con ayuda de un asistente de IA a partir de las secciones 7 a 9 y de la tabla de transferencias. La captura de GTKWave es propia.
 ---
 ### Referencias
 - Guía del curso: UART 8N1, control combinacional y actualización conjunta en subida, e integración con FemtoRV32 Quark (uart-riscv.pdf).
