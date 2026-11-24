@@ -55,7 +55,7 @@ Los periféricos se seleccionan mediante los bits superiores de la dirección (`
 
 En el siguiente diagrama se muestra cómo viajan los datos desde la memoria Flash hasta el panel LED, separando lo que corre en hardware (Verilog) y lo que ejecuta el FemtoRV32 en C:
 
-![Flujo Completo del Envío de Datos al Juego](img/flujo_datos_g2.png)
+![Flujo Completo del Envío de Datos al Juego](img/flujo_datos_g2.drawio.svg)
 
 | Tarea del Sistema | Dominio | Disparo / Sincronización | Flujo de Entrada $\rightarrow$ Salida |
 | :--- | :---: | :--- | :--- |
