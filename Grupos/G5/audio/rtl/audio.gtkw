@@ -31,7 +31,7 @@ tb_audio.dut.muestra[7:0]
 @200
 -Tiempos y control
 @24
-tb_audio.dut.u_tiempos.cnt_bclk[3:0]
+tb_audio.dut.u_tiempos.cnt_bclk[4:0]
 tb_audio.dut.cnt_bit[4:0]
 @28
 tb_audio.dut.tick_bajada

@@ -1,12 +1,13 @@
-// tb_audio: testbench de peripheral_audio. Comprueba los criterios de la sección 2.5.
-// Simula con clk = 25 MHz y CICLOS_BCLK = 16. Escribe tb_audio.vcd para GTKWave.
-`timescale 1ns / 1ps
+// tb_audio: testbench de peripheral_audio. Cada caso prueba transferencias del ASMD (T0 a T8,
+// sección 3.6) y los criterios de la sección 2.5. Escribe tb_audio.vcd para GTKWave.
+// Por defecto: clk = 27 MHz y CICLOS_BCLK = 18. Para 25 MHz: make sim25.
+`timescale 1ps / 1ps
 
 module tb_audio;
-    localparam CICLOS_BCLK = 16;
-    localparam T_CLK       = 40;                     // 25 MHz
-    localparam T_BCLK      = CICLOS_BCLK * T_CLK;    // 640 ns
-    localparam T_TRAMA     = 32 * T_BCLK;            // 20 480 ns
+    parameter CICLOS_BCLK = 18;                      // 16 con 25 MHz
+    parameter T_CLK       = 37036;                   // periodo de clk en ps (27 MHz); 40000 con 25 MHz
+    localparam T_BCLK     = CICLOS_BCLK * T_CLK;
+    localparam T_TRAMA    = 32 * T_BCLK;
 
     reg         clk = 1'b0, rst = 1'b1;
     reg         cs = 1'b0, rd = 1'b0, wr = 1'b0;
@@ -30,7 +31,7 @@ module tb_audio;
             if (cond) bien = bien + 1;
             else begin
                 mal = mal + 1;
-                $display("  FALLA  t=%0t ns  %0s", $time, texto);
+                $display("  FALLA  t=%0t ps  %0s", $time, texto);
             end
         end
     endtask
@@ -101,6 +102,27 @@ module tb_audio;
     always @(audio_lrclk) if (!rst) comprobar($time == t_baja, "LRCLK cambia en la bajada de BCLK");
     always @(audio_din)   if (!rst) comprobar($time == t_baja, "DIN cambia en la bajada de BCLK");
 
+    // ---------------------------------------------------------------- cobertura del ASMD (sección 3.6)
+    // Cuenta cuántas veces se ejecuta cada transferencia T0 a T8 de la tabla.
+    integer cuenta_t [0:8];
+    integer ti;
+    initial for (ti = 0; ti <= 8; ti = ti + 1) cuenta_t[ti] = 0;
+    always @(posedge clk) begin
+        if (rst) cuenta_t[0] = cuenta_t[0] + 1;                                          // T0
+        else begin
+            if (!dut.tick_bajada) cuenta_t[1] = cuenta_t[1] + 1;                          // T1
+            if (dut.tick_bajada)  cuenta_t[2] = cuenta_t[2] + 1;                          // T2
+            if (dut.carga)        cuenta_t[3] = cuenta_t[3] + 1;                          // T3
+            if (dut.tick_bajada && dut.cnt_bit != 5'd31) cuenta_t[4] = cuenta_t[4] + 1;   // T4
+            if (dut.tick_bajada && dut.u_i2s.estado == 1'b0 && dut.cnt_bit == 5'd14)
+                cuenta_t[5] = cuenta_t[5] + 1;                                            // T5
+            if (dut.tick_bajada && dut.u_i2s.estado == 1'b1 && dut.cnt_bit == 5'd30)
+                cuenta_t[6] = cuenta_t[6] + 1;                                            // T6
+            if (cs && wr) cuenta_t[7] = cuenta_t[7] + 1;                                  // T7
+            if (cs)       cuenta_t[8] = cuenta_t[8] + 1;                                  // T8
+        end
+    end
+
     // ---------------------------------------------------------------- utilidades
     task esperar_tramas(input integer n);
         integer k;
@@ -125,52 +147,58 @@ module tb_audio;
     // ---------------------------------------------------------------- estímulos
     reg [31:0]        dato;
     reg signed [7:0]  m, m_antes;
-    integer           k, subidas, primera, ultima;
-    real              tramas_por_periodo, f_medida;
+    integer           k, subidas, freq_la;
+    real              fs, f_esperada, t_primera, t_ultima, f_medida;
 
     initial begin
         $dumpfile("tb_audio.vcd");
         $dumpvars(0, tb_audio);
-        $display("== tb_audio: clk = 25 MHz, CICLOS_BCLK = %0d", CICLOS_BCLK);
+        fs      = 1.0e12 / (32.0 * CICLOS_BCLK * T_CLK);
+        freq_la = $rtoi(440.0 * 65536.0 / fs + 0.5);          // FREQ más cercano a 440 Hz
+        f_esperada = freq_la * fs / 65536.0;
+        $display("== tb_audio: clk = %.2f MHz, CICLOS_BCLK = %0d, fs = %.1f Hz, FREQ(La4) = %0d",
+                 1.0e6 / T_CLK, CICLOS_BCLK, fs, freq_la);
 
-        // 1. Reset: las salidas I2S quedan en reposo
+        // Caso 1 (T0): reset, las salidas I2S quedan en reposo
         repeat (4) @(posedge clk);
         comprobar({audio_bclk, audio_lrclk, audio_din} == 3'b000, "reposo durante el reset");
         @(negedge clk); rst = 0;
 
-        // 2. Registros: escritura, lectura y dirección sin uso
-        escribir(4'h0, 32'd591);          // La4 = 440,33 Hz
+        // Caso 2 (T7, T8): registros, escritura, lectura y dirección sin uso
+        escribir(4'h0, freq_la);          // La4
         escribir(4'h4, 32'd64);
         escribir(4'h8, 32'd1);
         escribir(4'hC, 32'hFFFF_FFFF);    // se ignora
-        leer(4'h0, dato); comprobar(dato == 32'd591, "lectura de FREQ");
+        leer(4'h0, dato); comprobar(dato == freq_la, "lectura de FREQ");
         leer(4'h4, dato); comprobar(dato == 32'd64,  "lectura de VOL");
         leer(4'h8, dato); comprobar(dato == 32'd1,   "lectura de CONTROL");
         leer(4'hC, dato); comprobar(dato == 32'd0,   "direccion sin uso se lee 0");
 
-        // 3. Tono de 440 Hz: muestras de +64 o -64 y frecuencia medida
+        // Caso 4 (T3, T4): tono de 440 Hz, muestras de +64 o -64 y frecuencia medida
+        // (el caso 3, tiempos con T1, T2, T5 y T6, se comprueba en cada flanco durante toda la simulación)
         esperar_tramas(2);
         $dumpoff;                         // el tramo largo no se guarda: el VCD queda pequeño
-        subidas = 0; primera = 0; ultima = 0; m_antes = 0;
+        subidas = 0; t_primera = 0; t_ultima = 0; m_antes = 0;
         for (k = 0; k < 1200; k = k + 1) begin
             esperar_tramas(1);
             revisar_trama(m);
             comprobar(m == 8'sd64 || m == -8'sd64, "muestra de +64 o -64");
-            if (m_antes == -8'sd64 && m == 8'sd64) begin
-                if (subidas == 0) primera = k;
-                ultima = k;
+            if (m_antes == -8'sd64 && m == 8'sd64) begin     // subida de la onda: se mide el instante
+                if (subidas == 0) t_primera = $realtime;
+                t_ultima = $realtime;
                 subidas = subidas + 1;
             end
             m_antes = m;
         end
-        tramas_por_periodo = (ultima - primera) * 1.0 / (subidas - 1);
-        f_medida = 48828.125 / tramas_por_periodo;
-        $display("   tono: %0d periodos, %.2f tramas por periodo, f = %.2f Hz (esperado 440,33 Hz)",
-                 subidas - 1, tramas_por_periodo, f_medida);
-        comprobar(f_medida > 439.0 && f_medida < 441.7, "frecuencia de 440,33 Hz");
+        // Frecuencia medida en segundos (tiempo de simulación), comparada con 440 Hz reales:
+        // así un FREQ calculado para otro reloj se detecta.
+        f_medida = (subidas - 1) * 1.0e12 / (t_ultima - t_primera);
+        $display("   tono: %0d periodos en %.3f ms, f = %.2f Hz (440 Hz pedidos; con FREQ = %0d da %.2f Hz)",
+                 subidas - 1, (t_ultima - t_primera) / 1.0e9, f_medida, freq_la, f_esperada);
+        comprobar(f_medida > 439.0 && f_medida < 441.0, "frecuencia del La4 a menos de 1 Hz de 440 Hz");
         $dumpon;
 
-        // 4. Caso de borde: VOL máximo y FREQ = 32768 (la muestra alterna en cada trama)
+        // Caso 5 (T3): borde, VOL máximo y FREQ = 32768 (la muestra alterna en cada trama)
         escribir(4'h4, 32'd127);
         escribir(4'h0, 32'd32768);
         esperar_tramas(2);
@@ -183,7 +211,7 @@ module tb_audio;
             m_antes = m;
         end
 
-        // 5. Silencio: ENABLE = 0 deja DIN en 0
+        // Caso 6 (T7, T3): silencio, ENABLE = 0 deja DIN en 0
         escribir(4'h8, 32'd0);
         esperar_tramas(2);
         for (k = 0; k < 4; k = k + 1) begin
@@ -191,13 +219,18 @@ module tb_audio;
             comprobar(palabra_izq == 16'd0 && palabra_der == 16'd0, "ENABLE = 0: DIN en 0");
         end
 
-        // 6. Reset en plena trama: las salidas vuelven al reposo
+        // Caso 7 (T0): reset en plena trama, las salidas vuelven al reposo
         @(negedge clk); rst = 1;
         repeat (3) @(posedge clk);
         #1 comprobar({audio_bclk, audio_lrclk, audio_din} == 3'b000, "reposo tras reset en plena trama");
         @(negedge clk); rst = 0;
         repeat (40) @(posedge clk);
 
+        $display("   cobertura del ASMD (veces que se ejecutó cada transferencia):");
+        for (ti = 0; ti <= 8; ti = ti + 1) begin
+            $display("     T%0d: %0d", ti, cuenta_t[ti]);
+            comprobar(cuenta_t[ti] > 0, "toda transferencia del ASMD se ejecuta al menos una vez");
+        end
         $display("== Resultado: %0d comprobaciones bien, %0d fallan", bien, mal);
         if (mal == 0) $display("== PASA");
         else          $display("== NO PASA");

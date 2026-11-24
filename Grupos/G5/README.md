@@ -133,6 +133,8 @@ En esta sección se documentarán los principales avances, implementaciones, pru
 | 2026-11-23 | James Velasquez Boyaca | Audio: etapa de diseño (3.1 a 3.6) con ocho figuras; sección 2 ajustada a 512 ciclos por trama. | Hecho |
 | 2026-11-23 | James Velasquez Boyaca | Audio: Verilog del periférico (4.1), un módulo por bloque. | Hecho |
 | 2026-11-23 | James Velasquez Boyaca | Audio: testbench con 7 casos, Makefile y vista de GTKWave (5.1); pasa con 25 y 27 MHz. | Hecho |
+| 2026-11-24 | James Velasquez Boyaca | Audio: ASMD dibujado a mano con tabla de transferencias, arquitectura de control y ruta de datos, conexión al SoC, 27 MHz como reloj principal y testbench con cobertura de T0 a T8. | Hecho |
+| 2026-11-24 | James Velasquez Boyaca | Audio: la caja negra de Andrés González se redibujó como figura 5 con las señales rd, d_out y ack; su versión original queda en el historial del repositorio. | Hecho |
 | 2026-11-09 | James Velásquez | Joystick · Crear la estructura de carpetas y el README del joystick. (`289c081`) | Hecho |
 | 2026-11-12 | jcastanedacr | Joystick · Agregar el fundamento inicial del joystick. (`eb45462`) | Hecho |
 | 2026-11-12 | jcastanedacr | Joystick · Integrar el fundamento en main mediante el PR #5. (`7d829f5`) | Hecho |

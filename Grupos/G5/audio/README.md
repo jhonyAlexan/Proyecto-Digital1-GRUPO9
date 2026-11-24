@@ -10,7 +10,7 @@ El documento sigue el diseño descendente: teoría (1), funcionamiento (2), dise
 
 ## 1. Marco teórico
 
-> **Hecho.** Listo cuando: los conceptos que el lector necesita (generación digital de tonos, método de salida elegido, periféricos mapeados en memoria) están explicados y con fuentes citadas.
+> **Estado:** Hecho.
 
 Esta sección sigue el camino del sonido, como en la figura 1: cómo se digitaliza (1.1), cómo un circuito genera un tono (1.2), cómo la muestra viaja por I2S (1.3) hasta el amplificador (1.4), cómo se ajusta a 8 bits y a la memoria disponible (1.5) y cómo el procesador controla el periférico (1.6). La 1.7 explica por qué se eligió I2S y no el PWM que propone el curso, y la 1.8 reúne las decisiones. Lo que lleva un número entre corchetes viene de la fuente con ese número en las referencias; las demás cifras las calculamos nosotros con los datos del texto, y se pueden repetir.
 
@@ -54,7 +54,7 @@ Como la amplitud ±VOL es simétrica, la salida no tiene componente continua. La
 
 *Figura 2. Con FREQ = 8192 el registro da una vuelta cada 8 muestras, y el bit 15 forma la onda cuadrada de ±VOL.*
 
-La resolución en frecuencia es lo que cambia la salida por cada unidad de `FREQ`, es decir fs/2<sup>16</sup>: con fs = 48 828 Hz, unos 0,75 Hz. Como `FREQ` es entero, el error máximo de una nota es la mitad, unos 0,37 Hz. Cada bit más en el registro de fase reduce la resolución a la mitad, y cuanto mayor es fs, más grueso es cada paso.
+La resolución en frecuencia es lo que cambia la salida por cada unidad de `FREQ`, es decir fs/2<sup>16</sup>: con fs = 46 875 Hz, unos 0,72 Hz. Como `FREQ` es entero, el error máximo de una nota es la mitad, unos 0,36 Hz. Cada bit más en el registro de fase reduce la resolución a la mitad, y cuanto mayor es fs, más grueso es cada paso.
 
 Para una nota de número MIDI m, con A4 (m = 69) fijada por convención en 440 Hz [3], la frecuencia en afinación temperada es:
 
@@ -68,7 +68,7 @@ $$
 \mathrm{FREQ} = \mathrm{round}\left(\frac{f_m \cdot 2^{16}}{f_s}\right)
 $$
 
-Con fs = 48 828,125 Hz, A4 da `FREQ` = 591 (440,33 Hz) y el do central, C4 (m = 60, 261,63 Hz), da `FREQ` = 351 (261,52 Hz). Esos valores suponen HCLK = 25 MHz y 512 ciclos por trama; con otro reloj cambia fs (1.4) y `FREQ` se recalcula con la misma fórmula.
+Con fs = 46 875 Hz (HCLK = 27 MHz y 576 ciclos por trama), A4 da `FREQ` = 615 (439,88 Hz) y el do central, C4 (m = 60, 261,63 Hz), da `FREQ` = 366 (261,78 Hz). Con 25 MHz y 512 ciclos (fs = 48 828 Hz) los mismos tonos son 591 y 351. Con cualquier otro reloj cambia fs (1.4) y `FREQ` se recalcula con la misma fórmula.
 
 ### 1.3 El bus I2S
 
@@ -96,7 +96,7 @@ $$
 f_s = \frac{\mathrm{HCLK}}{32 \cdot k}
 $$
 
-La tabla muestra qué ocurre con los dos relojes del proyecto, 25 MHz y 27 MHz (el de la Tang Nano 9K):
+La tabla muestra qué ocurre con los dos relojes posibles: 27 MHz, el de la Tang Nano 9K que usa el grupo, y 25 MHz, el de la guía del curso:
 
 | HCLK | Ciclos por trama | k | fs | Intervalo del datasheet |
 |---|---|---|---|---|
@@ -106,7 +106,7 @@ La tabla muestra qué ocurre con los dos relojes del proyecto, 25 MHz y 27 MHz (
 | 27 MHz | 512 | 16 | 52 734 Hz | ninguno, supera 50,4 kHz |
 | 27 MHz | 1024 | 32 | 26 367 Hz | ninguno |
 
-Por eso el diseño tiene un parámetro, `CICLOS_TRAMA`, que vale 512 con HCLK = 25 MHz y 576 con 27 MHz. Con 25 MHz, 512 es potencia de 2 y basta un contador libre de 9 bits (2.3.3); con 27 MHz hacen falta dos contadores encadenados. Para cualquier otro reloj se elige el k entero que deje fs dentro de un intervalo. El resto de los requisitos se cumple con el diseño: BCLK de 1,5625 MHz con 25 MHz y de 1,5 MHz con 27 MHz, 16 bits por slot, formato I2S y sin MCLK. Como el fabricante declara no soportada una LRCLK fuera de los intervalos, fs queda siempre dentro de uno de ellos.
+Por eso el diseño tiene un parámetro, `CICLOS_BCLK`, que vale 18 con HCLK = 27 MHz y 16 con 25 MHz. La trama dura 32 × `CICLOS_BCLK` ciclos (576 o 512) y la cuentan dos contadores encadenados (2.3.3). Para cualquier otro reloj se elige el k entero que deje fs dentro de un intervalo. El resto de los requisitos se cumple con el diseño: BCLK de 1,5 MHz con 27 MHz y de 1,5625 MHz con 25 MHz, 16 bits por slot, formato I2S y sin MCLK. Como el fabricante declara no soportada una LRCLK fuera de los intervalos, fs queda siempre dentro de uno de ellos.
 
 ### 1.5 Muestras de 8 bits y uso de memoria
 
@@ -117,10 +117,10 @@ Usar 8 bits busca ocupar poca memoria. La RAM del SoC es de 26 212 bytes y compi
 | Método | Memoria de datos | Observación |
 |---|---|---|
 | Generador de tonos (acumulador de fase) | 0 bytes de RAM | Elegido; solo usa registros (`FREQ`, `VOL`, fase y contador) |
-| PCM de 8 bits a fs = 48 828 Hz | 48 828 B por segundo (186 % de la RAM) | No cabe |
-| PCM de 8 bits con cada muestra repetida 6 veces (8,138 kHz) | 8 138 B por segundo (31 % de la RAM) | Cabe, pero no se usa |
+| PCM de 8 bits a fs = 46 875 Hz | 46 875 B por segundo (179 % de la RAM) | No cabe |
+| PCM de 8 bits con cada muestra repetida 6 veces (7,8 kHz) | 7 813 B por segundo (30 % de la RAM) | Cabe, pero no se usa |
 
-Con ondas cuadradas la muestra solo toma dos valores, +VOL y −VOL, así que más resolución no mejora el timbre. Con 16 bits la relación señal-ruido ideal sería de 98,1 dB en lugar de 49,9 dB, pero con PCM la memoria se duplicaría: un segundo a 8,138 kHz pasaría de 8 138 B a 16 276 B. Como el transmisor ya envía palabras de 16 bits, pasar a 16 bits más adelante solo exige ensanchar VOL y la muestra y cargar los bits 7:0 en lugar de ceros; el bus y la temporización no cambian.
+Con ondas cuadradas la muestra solo toma dos valores, +VOL y −VOL, así que más resolución no mejora el timbre. Con 16 bits la relación señal-ruido ideal sería de 98,1 dB en lugar de 49,9 dB, pero con PCM la memoria se duplicaría: un segundo a 7,8 kHz pasaría de 7 813 B a 15 625 B. Como el transmisor ya envía palabras de 16 bits, pasar a 16 bits más adelante solo exige ensanchar VOL y la muestra y cargar los bits 7:0 en lugar de ceros; el bus y la temporización no cambian.
 
 ### 1.6 Periférico mapeado en memoria
 
@@ -166,7 +166,7 @@ Elegimos I2S por tres razones. La primera es la integración: el amplificador re
 | Tema | Decisión | Se aplica en |
 |---|---|---|
 | Salida | I2S hacia el MAX98357A con BCLK, LRCLK y DIN, sin MCLK | 2.2 y 3.2 |
-| Frecuencia de muestreo | `CICLOS_TRAMA` = 512 con 25 MHz y 576 con 27 MHz; BCLK = 32 × LRCLK | 2.3, 3.3 y 3.6 |
+| Frecuencia de muestreo | `CICLOS_BCLK` = 18 con 27 MHz (trama de 576 ciclos) y 16 con 25 MHz (512); BCLK = 32 × LRCLK | 2.3, 3.3 y 3.6 |
 | Tono | Acumulador de fase de 16 bits y onda cuadrada de ±VOL | 2.4 y 3.3 |
 | Muestra | 8 bits con signo en los bits 15:8 de un slot de 16, repetida en ambos slots; no se almacena audio | 2.1 y 3.3 |
 | Registros | `FREQ`, `VOL` y `CONTROL` desde `0x00430000`; los valores se aplican en la siguiente muestra | 2.4 y 3.2 |
@@ -174,15 +174,15 @@ Elegimos I2S por tres razones. La primera es la integración: el amplificador re
 
 ## 2. Fundamento
 
-> **Hecho.** Listo cuando: el principio de funcionamiento del periférico cabe en uno o dos párrafos claros.
+> **Estado:** Hecho.
 
 ### 2.1 Principio de funcionamiento
 
-El CPU no produce el audio muestra a muestra. Solo escribe `FREQ`, `VOL` y `ENABLE`, y el periférico genera el sonido por sí mismo. Un generador de tonos (acumulador de fase) calcula una muestra de 8 bits con signo una vez por trama, cada 512 ciclos de HCLK (20,48 µs, fs = 48 828 Hz).
+El CPU no produce el audio muestra a muestra. Solo escribe `FREQ`, `VOL` y `ENABLE`, y el periférico genera el sonido por sí mismo. Un generador de tonos (acumulador de fase) calcula una muestra de 8 bits con signo una vez por trama, cada 576 ciclos de HCLK (21,33 µs, fs = 46 875 Hz).
 
-Un transmisor I2S coloca esa muestra en los 8 bits altos de una palabra de 16, la repite en los slots izquierdo y derecho y la serializa por DIN. BCLK vale HCLK/16 = 1,5625 MHz y LRCLK vale HCLK/512. El MAX98357A recibe la muestra y maneja el parlante con su salida clase D. Todas las salidas son registradas y salen de un único contador libre, de modo que BCLK, LRCLK y DIN quedan alineados sin generador de ticks separado.
+Un transmisor I2S coloca esa muestra en los 8 bits altos de una palabra de 16, la repite en los slots izquierdo y derecho y la serializa por DIN. BCLK vale HCLK/18 = 1,5 MHz y LRCLK vale HCLK/576. El MAX98357A recibe la muestra y maneja el parlante con su salida clase D. Todas las salidas son registradas y salen de dos contadores encadenados (2.3.3), de modo que BCLK, LRCLK y DIN quedan alineados.
 
-Las cifras de esta sección son las de HCLK = 25 MHz, con `CICLOS_TRAMA` = 512. Con 27 MHz el parámetro vale 576, cada BCLK dura 18 ciclos de HCLK y fs = 46 875 Hz.
+Las cifras de esta sección son las de HCLK = 27 MHz, el reloj de la Tang Nano 9K, con `CICLOS_BCLK` = 18. Con 25 MHz el parámetro vale 16, la trama dura 512 ciclos y fs = 48 828 Hz.
 
 ### 2.2 Conexiones del módulo MAX98357A
 
@@ -190,8 +190,8 @@ El FPGA actúa como maestro I2S: BCLK, LRCLK y DIN son salidas del FPGA y entrad
 
 ```
 FPGA (peripheral_audio)              Módulo MAX98357A
-audio_bclk   ─────────────────────►  BCLK   reloj de bit, 1,5625 MHz
-audio_lrclk  ─────────────────────►  LRC    reloj de trama, 48,828 kHz (0 = izq., 1 = der.)
+audio_bclk   ─────────────────────►  BCLK   reloj de bit, 1,5 MHz
+audio_lrclk  ─────────────────────►  LRC    reloj de trama, 46,875 kHz (0 = izq., 1 = der.)
 audio_din    ─────────────────────►  DIN    datos en serie, MSB primero
 3V3 o 5V     ─────────────────────►  VIN    alimentación (3,3 a 5 V)
 GND          ─────────────────────►  GND    tierra común
@@ -219,16 +219,16 @@ Los pines físicos de BCLK, LRCLK y DIN se asignan en 3.2.
 
 ### 2.3 Diagrama de tiempos
 
-Parámetros: HCLK = 25 MHz, 16 HCLK por BCLK, 16 BCLK por slot y 32 BCLK por trama.
+Parámetros: HCLK = 27 MHz, 18 HCLK por BCLK, 16 BCLK por slot y 32 BCLK por trama.
 
 | Magnitud | Valor |
 |---|---|
-| Período de BCLK | 16 HCLK = 640 ns (1,5625 MHz) |
-| Período de trama = 1/fs | 512 HCLK = 20,48 µs (fs = 48 828,125 Hz) |
-| Duración de un slot | 16 BCLK = 256 HCLK |
-| Frecuencia máxima representable | fs/2 ≈ 24,4 kHz |
+| Período de BCLK | 18 HCLK = 666,7 ns (1,5 MHz) |
+| Período de trama = 1/fs | 576 HCLK = 21,33 µs (fs = 46 875 Hz) |
+| Duración de un slot | 16 BCLK = 288 HCLK |
+| Frecuencia máxima representable | fs/2 ≈ 23,4 kHz |
 
-Con HCLK = 27 MHz, cada BCLK dura 18 HCLK y la trama, 576 HCLK; la estructura es la misma.
+Con HCLK = 25 MHz, cada BCLK dura 16 HCLK y la trama, 512 HCLK; la estructura es la misma.
 
 #### 2.3.1 Trama completa
 
@@ -248,7 +248,7 @@ La figura 4 amplía el instante en que cambia LRCLK. LRCLK y DIN cambian en los 
 
 #### 2.3.3 Relación con HCLK
 
-Dos contadores marcan el tiempo. `cnt_bclk` cuenta de 0 a `CICLOS_BCLK` − 1 dentro de cada período de BCLK (16 ciclos con 25 MHz, 18 con 27 MHz), y `cnt_bit` cuenta los 32 períodos de BCLK de la trama (0…31). De ellos salen todas las señales:
+Dos contadores marcan el tiempo. `cnt_bclk` cuenta de 0 a `CICLOS_BCLK` − 1 dentro de cada período de BCLK (18 ciclos con 27 MHz, 16 con 25 MHz), y `cnt_bit` cuenta los 32 períodos de BCLK de la trama (0…31). De ellos salen todas las señales:
 
 | Señal | Cómo se obtiene |
 |---|---|
@@ -256,7 +256,7 @@ Dos contadores marcan el tiempo. `cnt_bclk` cuenta de 0 a `CICLOS_BCLK` − 1 de
 | `tick_bajada` | Vale 1 cuando `cnt_bclk` = `CICLOS_BCLK` − 1: el siguiente flanco de HCLK es el de bajada de BCLK |
 | `cnt_bit` | Avanza en cada `tick_bajada`; es el índice del bit que se está enviando |
 
-LRCLK y DIN solo se actualizan con `tick_bajada`, por eso cambian siempre en el flanco de bajada de BCLK. Así el mismo diseño sirve con 25 MHz y con 27 MHz, cambiando solo `CICLOS_BCLK`. Los bloques y la máquina de estados que usan estos contadores están en 3.3 y 3.6.
+LRCLK y DIN solo se actualizan con `tick_bajada`, por eso cambian siempre en el flanco de bajada de BCLK. Así el mismo diseño sirve con 27 MHz y con 25 MHz, cambiando solo `CICLOS_BCLK`. Los bloques y la máquina de estados que usan estos contadores están en 3.3 y 3.6.
 
 ### 2.4 Mapa de registros
 
@@ -272,11 +272,11 @@ Los valores se aplican en la siguiente muestra. Escribirlos mientras suena es se
 
 ### 2.5 Criterios de comprobación
 
-- BCLK tiene período de 16 HCLK y ciclo de trabajo 50 %.
-- LRCLK vale 0 durante 16 BCLK y 1 durante 16 BCLK; la trama dura 512 HCLK.
+- BCLK tiene período de `CICLOS_BCLK` HCLK (18 con 27 MHz) y ciclo de trabajo 50 %.
+- LRCLK vale 0 durante 16 BCLK y 1 durante 16 BCLK; la trama dura 576 HCLK (512 con 25 MHz).
 - El MSB aparece un BCLK después del cambio de LRCLK. DIN solo cambia en flancos de bajada de BCLK.
 - Los bits 7:0 de cada slot son cero. Ambos slots llevan la misma muestra.
-- Con `FREQ = 591` y `VOL = 64`, la salida alterna ±64 con frecuencia 440,33 Hz ± la resolución de la medición.
+- Con `FREQ = 615` y `VOL = 64`, la salida alterna ±64 con frecuencia 439,88 Hz ± la resolución de la medición (con 25 MHz, `FREQ = 591` da 440,33 Hz).
 - Con `ENABLE = 0`, DIN vale 0 en todos los bits.
 - Reset síncrono activo alto: BCLK, LRCLK y DIN quedan en reposo.
 
@@ -284,7 +284,7 @@ Los valores se aplican en la siguiente muestra. Escribirlos mientras suena es se
 
 ### 3.1 Diagrama de caja negra
 
-> **Hecho.** Listo cuando: todas las entradas y salidas tienen nombre, sin mostrar nada del interior.
+> **Estado:** Hecho.
 
 La caja negra muestra el periférico desde afuera. A la izquierda llegan las señales del bus del procesador; a la derecha salen la respuesta al bus y las tres líneas I2S hacia el MAX98357A.
 
@@ -294,13 +294,13 @@ La caja negra muestra el periférico desde afuera. A la izquierda llegan las se�
 
 ### 3.2 Características de la interfaz
 
-> **Hecho.** Listo cuando: cada señal tiene nombre, dirección y ancho; están el mapa de registros, la salida hacia el parlante, los pines y los voltajes.
+> **Estado:** Hecho.
 
 **Señales.** Los nombres son los mismos del Verilog.
 
 | Señal | Dirección | Bits | Lado | Descripción |
 |---|---|---|---|---|
-| `clk` | Entrada | 1 | Bus | Reloj del SoC (HCLK): 25 MHz en la consola y 27 MHz en la Tang Nano 9K |
+| `clk` | Entrada | 1 | Bus | Reloj del SoC (HCLK): 27 MHz en la Tang Nano 9K; 25 MHz con el reloj de la guía |
 | `rst` | Entrada | 1 | Bus | Reinicio síncrono, activo en alto |
 | `cs` | Entrada | 1 | Bus | Selección del periférico, un ciclo por acceso |
 | `rd` | Entrada | 1 | Bus | Acceso de lectura |
@@ -313,7 +313,7 @@ La caja negra muestra el periférico desde afuera. A la izquierda llegan las se�
 | `audio_lrclk` | Salida | 1 | I2S | Canal: 0 izquierdo, 1 derecho; su frecuencia es fs |
 | `audio_din` | Salida | 1 | I2S | Muestra en serie, MSB primero |
 
-**Parámetro.** `CICLOS_BCLK` vale 16 con 25 MHz y 18 con 27 MHz. La trama dura 32 × `CICLOS_BCLK` ciclos de HCLK (512 o 576), con los valores de 2.3.
+**Parámetro.** `CICLOS_BCLK` vale 18 con 27 MHz y 16 con 25 MHz. La trama dura 32 × `CICLOS_BCLK` ciclos de HCLK (576 o 512), con los valores de 2.3.
 
 **Registros.** Son los de 2.4, y además se pueden leer. Desde el firmware se usan así:
 
@@ -322,7 +322,7 @@ La caja negra muestra el periférico desde afuera. A la izquierda llegan las se�
 #define AUDIO_VOL     (*(volatile unsigned int *) 0x00430004)
 #define AUDIO_CONTROL (*(volatile unsigned int *) 0x00430008)
 
-AUDIO_FREQ = 591;     /* La4: 440,33 Hz con fs = 48 828 Hz */
+AUDIO_FREQ = 615;     /* La4: 439,88 Hz con fs = 46 875 Hz (27 MHz) */
 AUDIO_VOL = 64;       /* amplitud ±64 */
 AUDIO_CONTROL = 1;    /* ENABLE = 1: suena */
 ```
@@ -341,13 +341,27 @@ AUDIO_CONTROL = 1;    /* ENABLE = 1: suena */
 
 Las tres salidas van en un banco de 3,3 V. El número de pin de cada una queda en el archivo de restricciones de la placa, dentro de `rtl/placas/` (sección 6).
 
+#### Conexión al SoC
+
+El SoC elige el periférico por región, como en la guía del curso: el audio ocupa la región `0x0043`, así que el decodificador de región activa `cs` cuando `mem_addr[31:16]` = `0x0043` y hay una lectura o una escritura. Los 4 bits bajos de `mem_addr` pasan como `addr`. En el femtoRV32, `rd` es `mem_rstrb` y `wr` es cualquier bit de `mem_wmask` en 1. En una lectura, `d_out` entra al multiplexor de lectura del SoC, que lo devuelve como `mem_rdata`.
+
+![Conexión al SoC y tiempos de un acceso](diagramas/fig6_conexion_soc.png)
+
+*Figura 6. Arriba, el decodificador de región entre el bus del SoC y el periférico. Abajo, los primeros accesos del testbench: cuatro escrituras y dos lecturas.*
+
+Cada acceso dura un ciclo. El registro cambia en el flanco del ciclo con `cs` = 1, y en el ciclo siguiente `ack` vale 1; si fue una lectura, `d_out` ya trae el dato en ese ciclo. La figura 6 lo muestra con FREQ: se escribe 615 y, cuando se lee, `d_out` devuelve 615.
+
+**Sobre `ack`.** El contrato del curso no incluye `ack`; el periférico lo agrega a propósito. Como `d_out` es registrado, el dato de una lectura aparece un ciclo después de `cs`, y `ack` marca justo ese ciclo. Cuesta un flip-flop. Si el adaptador del SoC ya espera un ciclo en toda lectura, deja `ack` sin conectar y el periférico funciona igual; si no, `ack` le dice cuándo tomar el dato.
+
+**Sin START, BUSY ni DONE.** La UART de la guía ejecuta operaciones que tardan (enviar un byte), y por eso el procesador necesita START para arrancarlas, y BUSY y DONE para saber cuándo terminan. El audio no ejecuta operaciones: genera sonido todo el tiempo, y los registros solo cambian los parámetros con que lo hace. Por eso el procesador puede escribir en cualquier momento, nunca espera, y el valor nuevo entra en la siguiente muestra (la siguiente `carga`) sin cortar la trama en curso.
+
 ### 3.3 Diagrama de bloques
 
-> **Hecho.** Listo cuando: cada bloque interno tiene su función y las señales usan los mismos nombres que en Verilog.
+> **Estado:** Hecho.
 
-![Bloques internos de peripheral_audio](diagramas/fig6_bloques.png)
+![Bloques internos de peripheral_audio](diagramas/fig7_bloques.png)
 
-*Figura 6. Los cuatro bloques del periférico. Azul: lado del procesador; naranja: lado I2S.*
+*Figura 7. Los cuatro bloques del periférico. Azul: lado del procesador; naranja: lado I2S.*
 
 | Bloque (módulo) | Qué hace | Entradas | Salidas |
 |---|---|---|---|
@@ -360,37 +374,46 @@ Las tres salidas van en un banco de 3,3 V. El número de pin de cada una queda e
 
 ### 3.4 Diagrama de flujo
 
-> **Hecho.** Listo cuando: usa símbolos ISO 5807, cada decisión tiene salidas Sí y No, y no hay terminal de Fin en procesos cíclicos.
+> **Estado:** Hecho.
 
-La figura 7 muestra lo que hace el periférico en cada ciclo de HCLK. Primero atiende una escritura del procesador, si la hay. Después, solo en los flancos de bajada de BCLK, carga una muestra nueva al final de la trama o desplaza un bit, y cambia de canal en los bits 14 y 30.
+La figura 8 muestra lo que hace el periférico en cada ciclo de HCLK. Primero atiende una escritura del procesador, si la hay. Después, solo en los flancos de bajada de BCLK, carga una muestra nueva al final de la trama o desplaza un bit, y cambia de canal en los bits 14 y 30.
 
-![Diagrama de flujo](diagramas/fig7_flujo.png)
+![Diagrama de flujo](diagramas/fig8_flujo.png)
 
-*Figura 7. Diagrama de flujo con símbolos ISO 5807: terminal, proceso y decisión.*
+*Figura 8. Diagrama de flujo con símbolos ISO 5807: terminal, proceso y decisión.*
 
 ### 3.5 Clasificación del flujo
 
-> **Hecho.** Listo cuando: los pasos están separados en ruta de datos y unidad de control.
+> **Estado:** Hecho.
 
 | Ruta de datos (guarda y transforma valores) | Unidad de control (decide cuándo) |
 |---|---|
-| Registros FREQ, VOL y CONTROL | Decodificación de `cs`, `wr` y `addr[3:2]` |
-| Acumulador de fase de 16 bits | Contadores `cnt_bclk` y `cnt_bit` |
-| Cálculo de la muestra (±VOL o 0) | Señales `tick_bajada` y `carga` |
-| Registro de desplazamiento de 32 bits | Máquina de estados IZQ/DER |
-| Multiplexor de lectura hacia `d_out` | Generación de `ack` |
+| Registros FREQ, VOL y CONTROL | Órdenes de escritura y lectura: `cs`, `rd`, `wr` y `addr[3:2]` |
+| Acumulador de fase de 16 bits y sumador `fase + FREQ` | Condición `tick` = (`cnt_bclk` = 17) |
+| Cálculo de la muestra (±VOL o 0) | Condiciones `cnt_bit` = 14, 30 y 31 |
+| Registro de desplazamiento de 32 bits | Orden `carga` = `tick` y (`cnt_bit` = 31) |
+| Contadores `cnt_bclk` y `cnt_bit`, y registro `bclk` | Máquina de estados IZQ/DER |
+| Multiplexor de lectura hacia `d_out` y registro `ack` | |
 
-El flujo es síncrono, porque todo cambia en el flanco de subida de HCLK, y continuo, porque cada trama se repite sola cada 512 ciclos sin esperar al procesador. El procesador solo cambia los valores con los que trabaja la ruta de datos.
+Los contadores están en la ruta de datos: son registros que cuentan y entregan condiciones (`tick`, `cnt_bit` = 14, 30 o 31). La unidad de control solo usa esas condiciones para decidir qué transferencia ocurre.
+
+La figura 9 lleva esa separación al hardware. A la izquierda, la unidad de control decide qué transferencia ocurre en cada ciclo; a la derecha, la ruta de datos guarda y transforma los valores.
+
+![Unidad de control y ruta de datos](diagramas/fig9_control_datos.png)
+
+*Figura 9. Unidad de control y ruta de datos. Las flechas naranjas son señales de control; la azul lleva el valor de los contadores, que la unidad de control necesita para decidir.*
+
+El flujo es síncrono, porque todo cambia en el flanco de subida de HCLK, y continuo, porque cada trama se repite sola cada 576 ciclos sin esperar al procesador. El procesador solo cambia los valores con los que trabaja la ruta de datos.
 
 ### 3.6 Máquinas de estado
 
-> **Hecho.** Listo cuando: cada máquina tiene estado de reset, transiciones con su condición y las salidas de cada estado.
+> **Estado:** Hecho.
 
 El periférico tiene una sola máquina de estados, dentro de `i2s_tx`. Sus dos estados son los dos canales de la trama, y la salida de cada estado es directamente LRCLK, así que es una máquina de Moore.
 
-![Máquina de estados de la trama](diagramas/fig8_fsm_trama.png)
+![Máquina de estados de la trama](diagramas/fig10_fsm_trama.png)
 
-*Figura 8. Máquina de estados de la trama. El reset la deja en IZQ con `cnt_bit` = 31, para que el primer flanco de bajada cargue una muestra.*
+*Figura 10. Máquina de estados de la trama. El reset la deja en IZQ con `cnt_bit` = 31, para que el primer flanco de bajada cargue una muestra.*
 
 | Estado | `audio_lrclk` | Pasa a | Condición | Acción |
 |---|---|---|---|---|
@@ -399,13 +422,53 @@ El periférico tiene una sola máquina de estados, dentro de `i2s_tx`. Sus dos e
 
 LRCLK cambia en los bits 14 y 30, un BCLK antes del MSB de cada palabra (bits 0 y 16), como pide I2S (figura 4). El lado del bus no necesita máquina de estados: cada acceso dura un ciclo y `ack` es solo `cs` retrasado un ciclo.
 
+#### ASMD y tabla de transferencias
+
+El ASMD une la máquina de estados con la ruta de datos: para cada estado dice qué registros cambian y bajo qué condición. Una vuelta por el diagrama es un ciclo de HCLK, y está hecho para 27 MHz (`CICLOS_BCLK` = 18).
+
+![ASMD del transmisor I2S](diagramas/fig11_asmd.jpg)
+
+*Figura 11. ASMD del transmisor I2S, dibujado a mano, con las transferencias T0 a T8.*
+
+Las condiciones usan dos señales que se calculan en el mismo ciclo:
+
+$$
+\text{tick} = (\text{cnt\_bclk} = 17) \qquad \text{fase\_sig} = \text{fase} + \text{FREQ}
+$$
+
+La muestra `m` sale de `fase_sig`:
+
+$$
+m = \begin{cases} 0 & \text{si EN} = 0 \\ +\text{VOL} & \text{si fase\_sig}[15] = 1 \\ -\text{VOL} & \text{si fase\_sig}[15] = 0 \end{cases}
+$$
+
+| T | Estado | Condición | Transferencias |
+|---|---|---|---|
+| T0 | Reset | `rst` = 1 | `cnt_bclk ← 0`, `cnt_bit ← 31`, `fase ← 0`, `desplaza ← 0`, `bclk ← 0`, estado `← IZQ` |
+| T1 | IZQ, DER | `tick` = 0 | `cnt_bclk ← cnt_bclk + 1`; `bclk ← (cnt_bclk + 1 ≥ 9)` |
+| T2 | IZQ, DER | `tick` = 1 | `cnt_bclk ← 0`; `bclk ← 0`; `cnt_bit ← cnt_bit + 1` |
+| T3 | IZQ | `tick` = 1 y `cnt_bit` = 31 | `fase ← fase + FREQ`; `desplaza ← {m, 0x00, m, 0x00}` |
+| T4 | IZQ, DER | `tick` = 1 y `cnt_bit` ≠ 31 | `desplaza ← desplaza << 1` |
+| T5 | IZQ | `tick` = 1 y `cnt_bit` = 14 | estado `← DER` |
+| T6 | DER | `tick` = 1 y `cnt_bit` = 30 | estado `← IZQ` |
+| T7 | Cualquiera | `cs` = 1 y `wr` = 1 | `FREQ`, `VOL` o `EN ← d_in`, según `addr[3:2]` |
+| T8 | Cualquiera | `cs` = 1 | `ack ← 1`; si `rd` = 1, `d_out ← registro[addr]` |
+
+Todo registro que no aparece en una transferencia mantiene su valor. Las salidas son `audio_lrclk` = estado, `audio_din = desplaza[31]` y `audio_bclk = bclk`. T7 y T8 son del bus y ocurren en paralelo, en cualquier estado.
+
+Tres coincidencias explican por qué el diseño funciona:
+
+1. T2, T3 o T4 y T5 o T6 ocurren en el mismo flanco, y todas usan los valores de antes del flanco. Por eso, con `cnt_bit` = 14 se pasa a DER y el bit 15 ya sale con LRCLK = 1, un BCLK antes del MSB del slot derecho.
+2. T3 carga la muestra calculada con `fase + FREQ`, la misma fase que se guarda en ese flanco. Así la muestra no llega con una trama de retraso.
+3. BCLK baja (T2) en el mismo flanco en que cambian `desplaza` y el estado. Por eso LRCLK y DIN cambian en la bajada de BCLK, y el MAX98357A los lee en la subida, con medio período de margen.
+
 ## 4. Etapa de descripción en HDL
 
 ### 4.1 Organización de módulos e implementación en Verilog
 
-> **Hecho.** Listo cuando: hay un módulo por bloque, un módulo superior que los une, parámetros declarados y nombres iguales a los diagramas. Código en [`rtl/`](rtl/).
+> **Estado:** Hecho.
 
-Cada bloque de la figura 6 es un módulo, y `peripheral_audio` los une. Todos son síncronos, con reset síncrono activo en alto, y las señales se llaman igual que en las figuras 6 a 8.
+Cada bloque de la figura 7 es un módulo, y `peripheral_audio` los une. Todos son síncronos, con reset síncrono activo en alto, y las señales se llaman igual que en las figuras 7 a 10.
 
 | Archivo | Bloque | Contenido |
 |---|---|---|
@@ -418,7 +481,7 @@ Cada bloque de la figura 6 es un módulo, y `peripheral_audio` los une. Todos so
 La única diferencia entre placas es el parámetro. En el SoC el periférico se instancia así:
 
 ```verilog
-peripheral_audio #(.CICLOS_BCLK(16)) audio (   // 16 con clk = 25 MHz; 18 con 27 MHz
+peripheral_audio #(.CICLOS_BCLK(18)) audio (   // 18 con clk = 27 MHz; 16 con 25 MHz
     .clk(clk), .rst(rst), .cs(cs_audio), .rd(rd), .wr(wr), .addr(addr[3:0]),
     .d_in(d_in), .d_out(d_out_audio), .ack(ack_audio),
     .audio_bclk(audio_bclk), .audio_lrclk(audio_lrclk), .audio_din(audio_din)
@@ -431,39 +494,48 @@ La muestra se calcula con la fase del mismo ciclo en que se guarda (`fase + FREQ
 
 ### 5.1 Entorno de prueba: testbench, estímulos y observación
 
-> **Hecho.** Listo cuando: se prueban casos normales y de borde, y las formas de onda de GTKWave están explicadas con resultado esperado contra obtenido.
+> **Estado:** Hecho.
 
-El testbench [`tb_audio.v`](rtl/tb_audio.v) prueba el periférico completo con un reloj de 25 MHz. No hay que mirar las ondas para saber si funciona: incluye un receptor I2S de referencia que lee DIN igual que el MAX98357A, revisa solo los criterios de 2.5 y al final imprime `PASA` o `NO PASA`.
+El testbench [`tb_audio.v`](rtl/tb_audio.v) prueba el periférico completo con un reloj de 27 MHz. Cada caso ejercita transferencias del ASMD (3.6) y comprueba los criterios de 2.5. No hace falta mirar las ondas para saber si funciona: incluye un receptor I2S de referencia que lee DIN igual que el MAX98357A, y al final imprime `PASA` o `NO PASA`.
 
 ```bash
 cd Grupos/G5/audio/rtl
-make        # compila con Icarus Verilog y simula
-make wave   # abre GTKWave con las señales ya ordenadas (audio.gtkw)
+make          # simula con 27 MHz (CICLOS_BCLK = 18)
+make sim25    # simula con 25 MHz (CICLOS_BCLK = 16)
+make wave     # abre GTKWave con las señales ya ordenadas (audio.gtkw)
 ```
 
-| # | Caso | Estímulo | Esperado | Obtenido |
-|---|---|---|---|---|
-| 1 | Reset | `rst` = 1 | BCLK, LRCLK y DIN en 0 | Igual |
-| 2 | Registros | Escribe FREQ = 591, VOL = 64 y CONTROL = 1; lee los tres y el offset `0xC` | Se leen los valores escritos, `0xC` se lee 0 y `ack` llega un ciclo después de `cs` | Igual |
-| 3 | Tiempos | Todos los flancos de la simulación | BCLK de 16 ciclos al 50 %; trama de 512 ciclos; 16 bits por slot; LRCLK y DIN cambian solo en la bajada de BCLK | Igual en todos los flancos |
-| 4 | Tono de 440 Hz | FREQ = 591 y VOL = 64 durante 1200 tramas | Muestras de +64 o −64; f = 440,33 Hz | +64 o −64; 110,90 tramas por período, f = 440,29 Hz |
-| 5 | Borde | VOL = 127 y FREQ = 32768 | La muestra alterna +127 y −127 en cada trama | Igual (figura 9) |
-| 6 | Silencio | CONTROL = 0 | DIN en 0 en todos los bits | Igual |
-| 7 | Reset a mitad de trama | `rst` = 1 con el tono sonando | Las salidas vuelven al reposo | Igual |
+| # | Caso | Transferencias | Estímulo | Esperado | Obtenido |
+|---|---|---|---|---|---|
+| 1 | Reset | T0 | `rst` = 1 | BCLK, LRCLK y DIN en 0 | Igual |
+| 2 | Registros | T7, T8 | Escribe FREQ = 615, VOL = 64 y CONTROL = 1; lee los tres y el offset `0xC` | Se leen los valores escritos, `0xC` se lee 0 y `ack` llega un ciclo después de `cs` | Igual (figura 6) |
+| 3 | Tiempos | T1, T2, T5, T6 | Todos los flancos de la simulación | BCLK de 18 ciclos al 50 %; trama de 576 ciclos; 16 bits por slot; LRCLK y DIN cambian solo en la bajada de BCLK | Igual en todos los flancos |
+| 4 | Tono de 440 Hz | T3, T4 | FREQ = 615 y VOL = 64 durante 1200 tramas | Muestras de +64 o −64; f a menos de 1 Hz de 440 Hz | +64 o −64; 10 períodos en 22,719 ms, f = 440,15 Hz |
+| 5 | Borde | T3 | VOL = 127 y FREQ = 32768 | La muestra alterna +127 y −127 en cada trama | Igual (figura 12) |
+| 6 | Silencio | T7, T3 | CONTROL = 0 | DIN en 0 en todos los bits | Igual |
+| 7 | Reset a mitad de trama | T0 | `rst` = 1 con el tono sonando | Las salidas vuelven al reposo | Igual |
 
-Resultado: 93 613 comprobaciones, 0 fallas. Con `CICLOS_BCLK` = 18 (reloj de 27 MHz) el mismo testbench también pasa.
+Resultado: 93 622 comprobaciones y 0 fallas con 27 MHz. Con `make sim25` (25 MHz, FREQ = 591) el resultado es el mismo.
 
-En el caso 4, la diferencia entre 440,29 Hz y 440,33 Hz viene de la medición, no del diseño. El testbench cuenta tramas enteras entre subidas de la onda, y en 10 períodos eso da una resolución cercana a 0,4 Hz.
+El tono se mide en segundos de simulación, no en tramas, y se compara con 440 Hz reales. Así el testbench detecta un FREQ calculado para otro reloj: con 27 MHz y FREQ = 591 (el valor de 25 MHz) mide 422,69 Hz y falla. La diferencia entre 440,15 Hz medidos y 439,88 Hz teóricos viene de la medición: el testbench toma el instante de cada trama, y en 10 períodos eso da una resolución cercana a 0,4 Hz.
 
-![Simulación de dos tramas](diagramas/fig9_simulacion.png)
+Además, el testbench cuenta cuántas veces se ejecuta cada transferencia del ASMD y falla si alguna queda en cero:
 
-*Figura 9. Dos tramas del caso 5, tomadas de `tb_audio.vcd`. Cada `carga` mete una muestra nueva en el registro de desplazamiento: +127 (`0x7F`) sale por DIN como `0111 1111` y −127 (`0x81`) como `1000 0001`, seguidos de ocho ceros. LRCLK cambia un BCLK antes del primer bit de cada slot.*
+| T0 | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 |
+|---|---|---|---|---|---|---|---|---|
+| 7 | 661 551 | 38 914 | 1217 | 37 697 | 1216 | 1216 | 7 | 11 |
 
-Para ver lo mismo en GTKWave, abre `make wave`, busca la escritura de FREQ = 32768 hacia el final de la simulación y amplía dos tramas. La vista `audio.gtkw` agrupa las señales en cuatro bloques: bus, registros y muestra, tiempos y control, y salida I2S.
+T0 cuenta ciclos de reset; T7 y T8, accesos al bus. T3, T5 y T6 son una por trama, y T2 son 32 por trama.
+
+![Simulación de dos tramas](diagramas/fig12_simulacion.png)
+
+*Figura 12. Dos tramas del caso 5, tomadas de `tb_audio.vcd`. Cada `carga` mete una muestra nueva en el registro de desplazamiento: −127 (`0x81`) sale por DIN como `1000 0001` y +127 (`0x7F`) como `0111 1111`, seguidos de ocho ceros. LRCLK cambia un BCLK antes del primer bit de cada slot.*
+
+Para verlo en GTKWave, abre `make wave`, busca la escritura de FREQ = 32768 hacia el final de la simulación y amplía dos tramas. La vista `audio.gtkw` agrupa las señales en cuatro bloques: bus, registros y muestra, tiempos y control, y salida I2S.
 
 ## 6. Etapa de implementación
 
-> **Pendiente.** Listo cuando: la síntesis no da errores, hay archivo de asignación de pines, reporte de recursos y prueba en placa con evidencia (foto, video u osciloscopio).
+> **Estado:** Pendiente.
 
 ## Referencias
 
