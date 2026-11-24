@@ -1,5 +1,5 @@
 # Controlador IMU BMI160 por SPI y Detector de Golpes (Tang Nano 9K)
-Grupo 3: Kennet, Jeimy, Alexander.
+Grupo 3: Kennet, Jeimmy, Alexander.
 
 En clase de laboratorio se probaron de nuevo los diferentes còdigos, se revisò que funcionara fìsicamente en la FPGA y se actualizaron en una nueva carpeta llamada_ IMU_Probado_FPGA.
 
