@@ -363,8 +363,33 @@ Escribir píxeles durante el barrido: la escritura usa un puerto de la memoria y
 
 > Uso de IA: el texto de las secciones 10.1 y 10.2 se elaboró con ayuda de un asistente de IA (Claude) a partir del capítulo 12 de la guía y del diseño del grupo.
 
+#### 10.3 Adaptador al bus de FemtoRV
 
+Figura 13: Adaptador entre FemtoRV32 Quark y el core. `chip_select` elige la región con `mem_addr[31:16]`; dentro del periférico, el decodificador local elige el registro con `addr[15:0]`. Las marcas indican el ancho en bits.
 
+El adaptador está en `rtl/peripheral_hub75.v` y sigue el patrón del periférico UART8N1 de la guía (capítulo 12). Tiene tres partes:
+
+1. **Decodificador local** (`peripheral_hub75_addr_decoder`, combinacional). Con `cs = 1` produce una selección one-hot `sel[4:0] = {FB, FRAME, STATUS, BRIGHT, CONTROL}`. La ventana del framebuffer se reconoce con `addr[15:14] = 01`; los registros, por su offset exacto. Un offset que no corresponde a nada da `sel = 0`.
+2. **Control de registros** (`peripheral_hub75_register_control`, secuencial):
+   - Escritura: `CONTROL ← d_in[0]` con `sel[0] ∧ wmask[0]`; `BRIGHT ← d_in[9:0]` con `sel[1] ∧ wmask[0]`. Un píxel se escribe en el framebuffer en el mismo flanco del acceso: `fb_we = sel[4] ∧ wmask[0]`, `fb_waddr = addr[13:2]`, `fb_wdata = d_in[2:0]`.
+   - Lectura: con `cs ∧ rd`, `d_out` captura el registro seleccionado (0 para la ventana del framebuffer, el offset reservado o uno no válido) y lo conserva mientras no haya otra lectura.
+3. **Core** (`hub75_core`): framebuffer, generador de ticks, control y datapath de las secciones 7 a 9. Devuelve `busy` y `frame_count`.
+
+| Señal | Entrega 1 | Ahora | Por qué |
+|---|---|---|---|
+| `addr` | `addr[4:0]` | `addr[31:0]`, se usa `[15:0]` | La región la decide `chip_select`; el framebuffer necesita 14 bits de offset |
+| escritura | `wr` | `wmask[3:0]`, se usa `wmask[0]` | Quark indica con la máscara qué bytes escribe; un `sw` trae `1111` |
+| `d_out` | combinacional mientras `cs ∧ rd` | registrado y conservado | Quark pide el dato en EXEC y lo usa en WAIT, cuando `rd` ya bajó |
+
+Conexión en `SOC.v` de la guía: en `chip_select` la región `CHIP4ADDR = 0x0044` (marcada "Libre") pasa a ser la pantalla, y la respuesta va a `chip4_dout`.
+
+    peripheral_hub75 u_hub75 (
+        .clk(clk), .rst(!resetn),
+        .cs(cs[4]), .rd(rd), .addr(mem_addr),
+        .d_in(mem_wdata), .wmask(mem_wmask), .d_out(chip4_dout),
+        .hub75_rgb0(HUB75_RGB0), .hub75_rgb1(HUB75_RGB1), .hub75_row(HUB75_ROW),
+        .hub75_clk(HUB75_CLK), .hub75_lat(HUB75_LAT), .hub75_oe(HUB75_OE)
+    );
 #### 10.4 Tiempos del handshake entre el bus y el core
 
 ![Tiempos del handshake](fig14a-b.png)
