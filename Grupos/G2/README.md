@@ -74,7 +74,7 @@ Siguiendo la metodología de la guía del curso (`uart.pdf`), diseñamos el cont
 
 En lugar de dibujar solo el pinout de la memoria Flash, la caja negra representa el periférico RTL sintetizable dentro de la FPGA, con el bus del procesador a la izquierda y las $4$ señales físicas hacia la `W25Q64JV` a la derecha:
 
-![Diagrama de Caja Negra del Controlador Flash SPI](img/caja_negra_spi_g2.png)
+![Diagrama de Caja Negra del Controlador Flash SPI](img/caja_negra_spi_g2.drawio.svg)
 
 #### Características de la Interfaz
 
