@@ -106,7 +106,7 @@ En lugar de dibujar solo el pinout de la memoria Flash, la caja negra representa
 
 Dividimos el controlador en cuatro bloques síncronos gobernados por el reloj único `clk` ($27\text{ MHz}$): interfaz de registros MMIO (`spi_mmio_regs`), generador de pulsos de habilitación (`spi_tick_gen`), unidad de control (`spi_fsm_control`) y camino de datos (`spi_datapath`):
 
-![Diagrama de Bloques Control y Datapath del Controlador SPI](img/bloques_control_datapath_spi_g2.png)
+![Diagrama de Bloques Control y Datapath del Controlador SPI](img/bloques_control_datapath_spi_g2.drawio.svg)
 
 #### Mapa de Registros Internos (`spi_mmio_regs` — Base `0x0045_0000`)
 
