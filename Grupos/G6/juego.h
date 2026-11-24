@@ -28,8 +28,19 @@
 
 // la isla: se pisa desde arriba entre ISLA_X0 e ISLA_X1
 #define ISLA_Y  48
-#define ISLA_X0 8
-#define ISLA_X1 56
+#define ISLA_X0 5
+#define ISLA_X1 59
+
+// plataformas de arriba: se atraviesan desde abajo y con el joystick abajo
+typedef struct {
+  int x0, x1, y;
+} plataforma_t;
+#define N_PLATAFORMAS 3
+extern const plataforma_t plataformas[N_PLATAFORMAS];
+
+// tamano del dibujo de cada luchador (y de su caja del cuerpo)
+#define ANCHO 10
+#define ALTO  14
 
 typedef struct {
   int x, y;          // esquina izquierda y pies, en Q8.8

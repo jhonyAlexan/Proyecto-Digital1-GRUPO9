@@ -13,17 +13,24 @@
 #define ACELERACION     46
 #define VEL_MAX        333   // 1.3 px por cuadro
 #define SALTO         -691
-#define GRAVEDAD        51   // +0.2 px por cuadro
-#define CAIDA_MAX      870
+#define GRAVEDAD        38   // +0.15 px por cuadro: saltos flotados como en Smash
+#define CAIDA_MAX      512   // 2 px por cuadro: hay tiempo de volver
 #define T_GOLPE         10   // el golpe pega en los cuadros 3 a 7
 #define T_ESPERA         8   // pausa entre golpes si el mando sigue moviendose
 #define DANO_GOLPE       7
-#define EMPUJE_BASE    280
+#define EMPUJE_BASE    150   // con poco dano casi no lo mueve
 #define EMPUJE_ESCUDO  120   // el escudo para el golpe pero lo corre un poco
 #define T_ATURDIDO      14
 #define T_INVULNERABLE 100
 #define VIDAS            3
 #define T_VOLVER_INICIO 120  // mantener el boton 2 s en la pantalla final
+
+// dos a los lados y una mas alta en el centro
+const plataforma_t plataformas[N_PLATAFORMAS] = {
+    {11, 25, 36},
+    {39, 53, 36},
+    {24, 40, 24},
+};
 
 static void iniciar_luchador(luchador_t *l, int x, int dir, uint8_t color, uint8_t color2) {
   l->x = Q8(x);
@@ -48,8 +55,8 @@ static void iniciar_luchador(luchador_t *l, int x, int dir, uint8_t color, uint8
 }
 
 static void empezar_pelea(juego_t *g) {
-  iniciar_luchador(&g->j[0], 12, 1, 1, 3);   // J1 azul y cian
-  iniciar_luchador(&g->j[1], 44, -1, 4, 5);  // J2 rojo y magenta
+  iniciar_luchador(&g->j[0], 12, 1, 1, 3);   // J1 robot: azul y cian
+  iniciar_luchador(&g->j[1], 42, -1, 4, 5);  // J2 caballero: rojo y magenta
   g->estado = JUGANDO;
   g->tiempo = 0;
 }
@@ -67,6 +74,7 @@ static void mover(luchador_t *l, control_t *c) {
   int izq = c->x < -40;
   int der = c->x > 40;
   int arriba = c->y > 40;
+  int abajo = c->y < -40;  // bajar de una plataforma de arriba
   int salto_nuevo = arriba && !l->arriba_antes;  // empujar arriba, no mantener
   l->arriba_antes = arriba;
 
@@ -141,11 +149,20 @@ static void mover(luchador_t *l, control_t *c) {
   l->x += l->vx;
   l->y += l->vy;
 
-  // aterrizar en la isla (solo cayendo, desde arriba)
-  int px = l->x >> 8;
+  // joystick abajo sobre una plataforma de arriba: la atraviesa
+  if (abajo && l->en_suelo && (l->y >> 8) < ISLA_Y) l->y += Q8(5);
+
+  // aterrizar (solo cayendo, desde arriba, con el centro de los pies)
+  int px = (l->x >> 8) + (ANCHO >> 1);
   int py = l->y >> 8;
-  if (l->vy >= 0 && py >= ISLA_Y && py <= ISLA_Y + 4 && px >= ISLA_X0 && px <= ISLA_X1) {
-    l->y = Q8(ISLA_Y);
+  int piso = -1;
+  if (l->vy >= 0 && py >= ISLA_Y && py <= ISLA_Y + 4 && px >= ISLA_X0 && px <= ISLA_X1) piso = ISLA_Y;
+  const plataforma_t *p = plataformas;
+  for (int i = 0; i < N_PLATAFORMAS && !abajo; i++, p++) {
+    if (l->vy >= 0 && py >= p->y && py <= p->y + 4 && px >= p->x0 && px <= p->x1) piso = p->y;
+  }
+  if (piso >= 0) {
+    l->y = Q8(piso);
     l->vy = 0;
     l->saltos = 2;
     l->en_suelo = 1;
@@ -165,15 +182,15 @@ static int toca(luchador_t *a, luchador_t *d) {
   int ax = a->x >> 8, ay = a->y >> 8;
   int dx = d->x >> 8, dy = d->y >> 8;
 
-  // caja del golpe: 8 x 5 pixeles delante del atacante
+  // caja del golpe: 8 x 5 pixeles delante del atacante, a la altura del brazo
   int g_x0, g_x1;
-  if (a->dir > 0) { g_x0 = ax + 8; g_x1 = ax + 16; }
+  if (a->dir > 0) { g_x0 = ax + ANCHO; g_x1 = ax + ANCHO + 8; }
   else            { g_x0 = ax - 8; g_x1 = ax; }
-  int g_y0 = ay - 8, g_y1 = ay - 3;
+  int g_y0 = ay - 10, g_y1 = ay - 5;
 
-  // caja del cuerpo del rival: 8 x 11 pixeles
-  if (g_x1 < dx || g_x0 > dx + 8) return 0;
-  if (g_y1 < dy - 11 || g_y0 > dy) return 0;
+  // caja del cuerpo del rival: ANCHO x ALTO pixeles
+  if (g_x1 < dx || g_x0 > dx + ANCHO) return 0;
+  if (g_y1 < dy - ALTO || g_y0 > dy) return 0;
   return 1;
 }
 
@@ -192,20 +209,27 @@ static void aplicar_golpe(luchador_t *a, luchador_t *d) {
   // mas dano, mas lejos sale
   int empuje = EMPUJE_BASE + (d->dano << 2);
   d->vx = (a->dir > 0) ? empuje : -empuje;
-  d->vy = -550;
+  d->vy = -350 - (d->dano << 1);  // tambien sale mas alto con mas dano
+  if (d->vy < -900) d->vy = -900;
   d->estado = ATURDIDO;
   d->t_aturdido = T_ATURDIDO;
   d->en_suelo = 0;
   d->destello = 6;
 }
 
-// Si salio de la pantalla pierde una vida y reaparece arriba de la isla
+// Zonas de muerte bien afuera de la pantalla: fuera de la isla todavia se
+// puede volver con el doble salto. Si pasa el limite pierde una vida.
+#define LIMITE_IZQ    -36
+#define LIMITE_DER     90
+#define LIMITE_ABAJO  120
+#define LIMITE_ARRIBA -40
+
 static int revisar_caida(luchador_t *l) {
   int px = l->x >> 8, py = l->y >> 8;
-  if (px > -14 && px < 70 && py < 74 && py > -30) return 0;
+  if (px > LIMITE_IZQ && px < LIMITE_DER && py < LIMITE_ABAJO && py > LIMITE_ARRIBA) return 0;
   l->vidas--;
   l->dano = 0;
-  l->x = Q8(28);
+  l->x = Q8(27);
   l->y = Q8(14);
   l->vx = 0;
   l->vy = 0;
