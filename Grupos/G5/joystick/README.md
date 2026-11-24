@@ -123,7 +123,7 @@ El circuito estándar para recibir un bit de otro dominio es el sincronizador: u
 
 En un sistema con periféricos mapeados en memoria, el procesador controla el hardware leyendo y escribiendo direcciones: cada periférico ocupa una ventana del mapa de memoria. El manual de RISC-V indica que distintos rangos del espacio de direcciones pueden contener memoria principal o uno o más dispositivos de E/S, y que las lecturas y escrituras a dispositivos de E/S pueden tener efectos secundarios visibles, mientras que los accesos a memoria principal no [11]. El documento de la fase de diseño fija esta arquitectura para la consola: un solo bus de memoria y periféricos mapeados en memoria (MMIO) [9].
 
-En el SoC del curso el bus es Wishbone y cada periférico se conecta mediante un adaptador (`WishbonePeripheral`). Cuando el firmware accede a la ventana de un periférico, el adaptador le entrega durante un ciclo las señales de acceso (en una escritura, `cs`, `wr`, `addr` y `d_in`) y responde `ack` al bus [12]. La interfaz completa, con `rd` y `d_out` para las lecturas, está en el [README del equipo](../README.md).
+El decodificador del SoC selecciona el periférico y le entrega un desplazamiento en bytes [12]. En el joystick, el bus local usa `addr[3:0]`. El periférico registra el dato leído en `d_out` e indica con `ack` el ciclo de respuesta. La sección 3.2.4 fija los tiempos del acceso.
 
 **Aplicación al joystick.** El procesador solo ve registros: lee la posición de cada eje y el estado del botón con una lectura a la dirección del registro correspondiente. La recepción por UART y la sincronización ocurren en hardware, sin intervención del procesador. Esto plantea dos preguntas de diseño para 3.2 *(razonamiento propio a partir de [11])*:
 
@@ -258,37 +258,38 @@ Se propone transmitir 30 paquetes por segundo, con un intervalo aproximado de 33
 
 #### 3.2.4 Interfaz lógica del periférico con el procesador
 
-El periférico se conectará al procesador femtoRV32 mediante la interfaz de acceso a registros del SoC.
+El joystick usa la región `0x0047` para mantener separada la UART de consola del SoC, que se comunica con el PC en `0x0040`.
 
-Las señales propuestas son:
+El decodificador del SoC activa `cs` cuando `(mem_addr[31:16] == 16'h0047) && (rd || wr)` y entrega `addr = mem_addr[3:0]` al periférico. Los bits `mem_addr[15:4]` no intervienen en la selección. Por eso los mismos desplazamientos se repiten cada 16 bytes dentro de la región. El firmware usa las direcciones de la tabla 3.2.5.
 
-| Señal | Dirección | Ancho | Función |
-|---|---|---|---|
-| `clk` | Entrada | 1 bit | Reloj del sistema |
-| `rst` | Entrada | 1 bit | Reinicio síncrono activo en alto |
-| `cs` | Entrada | 1 bit | Selección del periférico |
-| `addr[31:0]` | Entrada | 32 bits | Dirección u offset de acceso a registros |
-| `rd` | Entrada | 1 bit | Habilitación de lectura |
-| `wr` | Entrada | 1 bit | Habilitación de escritura |
-| `d_in[31:0]` | Entrada | 32 bits | Datos procedentes del procesador |
-| `d_out[31:0]` | Salida | 32 bits | Datos entregados al procesador |
-| `uart_rx` | Entrada | 1 bit | Recepción de los datos enviados por la ESP32 |
+| Señal | Dirección | Bits | Función |
+|---|---|---:|---|
+| `clk` | Entrada | 1 | Reloj del SoC, 27 MHz en la Tang Nano 9K. |
+| `rst` | Entrada | 1 | Reinicio síncrono, activo en alto. Tiene prioridad y pone `ack` y `d_out` en cero. |
+| `cs` | Entrada | 1 | Selección del periférico, un ciclo por acceso. |
+| `rd` | Entrada | 1 | Acceso de lectura. En el femtoRV32 corresponde a `mem_rstrb`. |
+| `wr` | Entrada | 1 | Acceso de escritura. Se activa si algún bit de `mem_wmask` vale 1. |
+| `addr[3:0]` | Entrada | 4 | Desplazamiento local en bytes. |
+| `d_in[31:0]` | Entrada | 32 | Dato que escribe el procesador. Los registros del mando son de solo lectura. |
+| `d_out[31:0]` | Salida | 32 | Dato de lectura registrado. Conserva su valor entre lecturas. |
+| `ack` | Salida | 1 | Vale 1 el ciclo siguiente a `cs` e indica que el acceso terminó. |
 
-Se propone mantener una interfaz de dirección de 32 bits, compatible con el ancho utilizado por el SoC base, y decodificar internamente los bits necesarios para identificar los registros. La adaptación entre dirección completa y desplazamiento local deberá establecerse durante la integración.
+`uart_rx` es la entrada serie de la ESP32 y pertenece al enlace físico. El multiplexor de lectura del SoC devuelve `d_out` al procesador como `mem_rdata`.
 
-El procesador accederá principalmente mediante operaciones de lectura, puesto que los datos del joystick se originan fuera de la FPGA. Las señales `wr` y `d_in` se conservan por compatibilidad con la interfaz común, aunque no se proponen registros de escritura en esta versión.
+**Tiempo de lectura.** Durante el ciclo N, el procesador presenta el desplazamiento con `cs=1` y `rd=1`. En el flanco ascendente que inicia N+1, el periférico captura el registro seleccionado en `d_out` y copia `cs` en `ack`. Durante N+1 el dato es válido y `ack=1`. Si los accesos son consecutivos, `ack` permanece alto durante los ciclos de respuesta consecutivos.
+
+**Uso de `ack`.** Como `d_out` es registrado, `ack` marca el ciclo en que el adaptador puede tomar el dato. Si el adaptador del SoC ya espera un ciclo en cada lectura, puede dejar `ack` sin conectar. Una escritura también recibe `ack`; los registros y `d_out` conservan su valor por ese acceso.
 
 #### 3.2.5 Mapa de registros del joystick
 
-Se propone utilizar tres registros de 32 bits para almacenar y consultar los datos recibidos.
-
-| Offset | Registro | Acceso | Función |
+| Desplazamiento `addr[3:0]` | Dirección del procesador | Registro | Lectura |
 |---|---|---|---|
-| `0x00` | `JOY1_DATA` | Lectura | Información del joystick del jugador 1 |
-| `0x04` | `JOY2_DATA` | Lectura | Información del joystick del jugador 2 |
-| `0x08` | `STATUS` | Lectura | Estado de recepción y errores |
+| `0x0` | `0x0047_0000` | `JOY1_DATA` | Última muestra válida del jugador 1. |
+| `0x4` | `0x0047_0004` | `JOY2_DATA` | Última muestra válida del jugador 2. |
+| `0x8` | `0x0047_0008` | `STATUS` | Banderas de recepción y error. |
+| Otros | Otros desplazamientos locales | Reservado | Devuelve cero con la misma latencia. |
 
-Los registros `JOY1_DATA` y `JOY2_DATA` tendrán la siguiente distribución:
+Ambos registros de jugador tienen la misma distribución de bits.
 
 | Bits | Campo | Función |
 |---|---|---|
@@ -313,9 +314,7 @@ Se propone que las banderas de validez y error permanezcan activas hasta el rein
 
 Cuando se detecte un error, deberán conservarse los últimos datos válidos. La recuperación y resincronización después de paquetes incompletos o corruptos se definirá en el diseño de la lógica de recepción.
 
-Las direcciones completas se obtendrán sumando los offsets a la dirección base del periférico, que todavía debe establecerse durante la integración con el SoC.
-
-Este mapa corresponde a una propuesta de diseño y aún no está implementado en Verilog.
+Falta implementar el banco de registros y su interfaz de lectura.
 
 #### 3.2.6 Pines y niveles eléctricos
 
@@ -374,7 +373,7 @@ El diseño se divide en los siguientes bloques funcionales:
 | Ensamblador de paquetes | Recibe los bytes y organiza la trama de 8 bytes definida en la sección 3.2. |
 | Validador | Comprueba el byte de inicio `0xAA`, el identificador del jugador y el checksum XOR antes de aceptar los datos. |
 | Banco de registros | Almacena los datos válidos en `JOY1_DATA` y `JOY2_DATA`, junto con los indicadores del registro `STATUS`. |
-| Interfaz MMIO | Decodifica `cs`, `addr[31:0]` y `rd`, y entrega al procesador el registro seleccionado por `d_out[31:0]`. |
+| Interfaz MMIO | Selecciona el registro con `addr[3:0]`, captura la lectura en `d_out[31:0]` y devuelve `ack` el ciclo siguiente a `cs`. |
 
 Todos los bloques internos trabajan con el reloj `clk` y el reinicio `rst` del sistema. Para las pruebas en la Tang Nano 9K se contempla una frecuencia de 27 MHz.
 
@@ -451,7 +450,7 @@ La ESP32 adquiere los ejes y el botón y transmite el paquete. En la FPGA, la **
 | Recepción UART | Dos flip-flops sincronizan `uart_rx` con `clk`. Un registro de desplazamiento reúne los ocho bits en `rx_data[7:0]`. | Detecta el bit de inicio, temporiza el muestreo y comprueba el bit de parada. Indica byte disponible con `rx_valid` o error de trama con `rx_frame_err`. |
 | Ensamblado | Almacena los campos, cuenta los bytes y acumula el XOR de los bytes 1 a 6. Un temporizador mide la espera entre bytes. | En espera, reconoce `0xAA` como inicio. Durante la recepción, cada `rx_valid` habilita la captura del siguiente byte y reinicia la espera. Si vence `T_MAX` o se detecta `rx_frame_err`, descarta el paquete parcial. |
 | Validación y escritura | Compara el identificador con 1 y 2, compara el XOR con el byte 7 y agrupa los campos según el mapa de 3.2.5. | Si el paquete está completo y ambas comprobaciones pasan, habilita la escritura de la muestra completa en `JOY1_DATA` o `JOY2_DATA` en un solo flanco de `clk`. Un descarte conserva las últimas muestras válidas. |
-| Estado y lectura MMIO | `STATUS` almacena las banderas. Un multiplexor entrega el registro seleccionado en `d_out[31:0]`. | Al aceptar una muestra, activa `P1_VALID` o `P2_VALID`. Un error de trama activa `UART_ERROR` y un checksum incorrecto activa `CHECKSUM_ERROR`. Con `cs` y `rd` activos, `addr` selecciona el registro de lectura. |
+| Estado y lectura MMIO | `STATUS` almacena las banderas. Un multiplexor selecciona el valor que captura el registro de salida `d_out[31:0]`. | Al aceptar una muestra, activa `P1_VALID` o `P2_VALID`. Un error de trama activa `UART_ERROR` y un checksum incorrecto activa `CHECKSUM_ERROR`. Con `cs` y `rd` activos, `addr[3:0]` selecciona la lectura y `ack` marca el ciclo de respuesta. |
 
 El reinicio síncrono `rst`, activo en alto, tiene prioridad: inicializa los registros y devuelve la lógica de recepción a la espera de inicio. Las banderas de `STATUS` permanecen activas hasta el reinicio. Mientras se ensambla un paquete, el procesador puede leer la última muestra válida.
 
