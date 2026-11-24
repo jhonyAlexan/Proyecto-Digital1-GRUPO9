@@ -68,7 +68,7 @@ Figura 2: Diagrama de bloques con entradas a la izquierda, salidas a la derecha,
 #### Temporización y aspectos pendientes
 Todos los bloques usan `clk`. A diferencia de la UART, aquí la división del reloj puede ser entera: con `CLK_DIV = 2` se obtiene un tick cada 74,07 ns sin error de frecuencia, porque el panel no exige una velocidad exacta.
 
-El framebuffer se divide en dos memorias de 2048 × 3 bits, una por mitad del panel, porque en cada pulso de `CLK` el panel necesita un píxel de cada mitad. Para que la síntesis use los bloques de RAM de la ECP5, la lectura será síncrona: el dato llega un ciclo después de la dirección. El análisis temporal debe garantizar que esté listo antes de enviarlo al panel.
+El framebuffer se divide en dos memorias de 2048 × 3 bits, una por mitad del panel, porque en cada pulso de `CLK` el panel necesita un píxel de cada mitad. Para que la síntesis use los bloques de RAM de la FPGA, la lectura será síncrona: el dato llega un ciclo después de la dirección. El análisis temporal debe garantizar que esté listo antes de enviarlo al panel.
 
 El procesador puede escribir mientras se barre. Si cambia la imagen a mitad de un barrido se verá un cuadro mezclado; se decidirá si basta con sincronizar el dibujo con `FRAME` o si hace falta un segundo framebuffer.
 
