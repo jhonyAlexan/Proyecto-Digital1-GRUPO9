@@ -27,13 +27,14 @@ Envía paqueteds de 8 bits y avisa cunado esta recibiendo, enviando o la informa
 Se encarga de administrar los envíos de la informacion
 
 Diagrama de flujo:
-<img width="1960" height="3612" alt="image" src="https://github.com/user-attachments/assets/831496eb-86bf-4ecb-9971-666e87ec93ca" />
+<img width="1840" height="3616" alt="image" src="https://github.com/user-attachments/assets/70e4a638-cb1f-4819-957a-c666b899df7f" />
 
 
 ## Desempaquetador
 Se encarga de recibir la información procesarla y almacenarla en el registro adecuado
 Diagrama de flujo:
-<img width="2600" height="3576" alt="image" src="https://github.com/user-attachments/assets/1e8fe6f4-bc88-46b9-888a-d374a693be0b" />
+<img width="2600" height="3576" alt="image" src="https://github.com/user-attachments/assets/d750cee2-03da-4b2e-b6a3-7714d2ed5dd7" />
+
 
 
 ### Como se envían los datos?
