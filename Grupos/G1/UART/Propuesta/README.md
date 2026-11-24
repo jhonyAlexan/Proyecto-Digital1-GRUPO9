@@ -33,7 +33,8 @@ Diagrama de flujo:
 ## Desempaquetador
 Se encarga de recibir la información procesarla y almacenarla en el registro adecuado
 Diagrama de flujo:
-<img width="2600" height="3576" alt="image" src="https://github.com/user-attachments/assets/d750cee2-03da-4b2e-b6a3-7714d2ed5dd7" />
+<img width="2600" height="3576" alt="image" src="https://github.com/user-attachments/assets/697ac2ff-686e-4793-a3f0-1fe7eec20b85" />
+
 
 
 
