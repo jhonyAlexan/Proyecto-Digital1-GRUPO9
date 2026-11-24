@@ -179,28 +179,45 @@ En el diagrama de flujo comportamental se clasifica cada operación según el bl
 
 ---
 
-### 3.5 Carta ASMD, FSM de Control y Tabla de Transiciones RT
+### 3.5 Carta ASMD, FSM de Control y Tabla de Transferencias RT
 
-Con base en la separación FSMD definimos una **Máquina de Estados Finitos (FSM)** de $5$ estados codificados en $3$ bits (`state[2:0]`) y su **Carta ASMD** con las transferencias entre registros (RTL) en cada flanco de subida de `clk`:
+Con base en la separación FSMD, definimos una **Máquina de Estados Finitos (FSM)** de $5$ estados codificados en $3$ bits (`state[2:0]`) y su **Carta ASMD** con las transferencias entre registros (RT) en cada flanco de subida de `clk`. Cada fila incluye un identificador (`T0`–`T11`) para trazar directamente los casos de prueba del *testbench*:
 
 ![Carta ASMD y FSM del Controlador Flash SPI](img/asmd_fsm_spi_g2.png)
 
-#### Tabla de Estados y Transferencias RTL (`spi_fsm_control` + `spi_datapath`)
+#### Tabla de Estados y Transferencias RT (`spi_fsm_control` + `spi_datapath`)
 
-| Estado Actual | Código | Condición de Transición | Estado Siguiente | Salidas de Control (`Moore` / `Mealy`) | Transferencias RTL en Datapath |
-| :--- | :---: | :--- | :---: | :--- | :--- |
-| **`IDLE`** | `3'b000` | `rst = 1` $\lor$ `start = 0` | `IDLE` | `spi_cs_n = ~cs_hold`, `spi_sclk = 0`, `busy = 0` | Mantiene registros sin cambios (retiene `done`) |
-| **`IDLE`** | `3'b000` | `start = 1` | `LOAD_CMD` | `busy <= 1`, **`done <= 0`** | `cmd_reg <= cmd`, decodifica tamaño de trama a variable `len`, `addr_reg <= addr`, `tx_reg <= tx_data` |
-| **`LOAD_CMD`** | `3'b001` | `sclk_tick = 0` | `LOAD_CMD` | `spi_sclk = 0`, `busy = 1` | Espera sincronización con frontera de `sclk_tick` |
-| **`LOAD_CMD`** | `3'b001` | `sclk_tick = 1` | `SCLK_LOW` | `spi_cs_n <= 0` ($t_0$) | `bit_cnt <= 0`, `byte_cnt <= 0`, `shift_reg <= cmd_reg`, `spi_mosi <= cmd_reg[7]` |
-| **`SCLK_LOW`** | `3'b010` | `sclk_tick = 0` | `SCLK_LOW` | `spi_cs_n = 0`, `spi_sclk = 0`, `busy = 1` | Mantiene `spi_mosi` estable (*setup* $T_{\text{half}}$) |
-| **`SCLK_LOW`** | `3'b010` | `sclk_tick = 1` | `SCLK_HIGH` | `spi_sclk <= 1` (Flanco $\uparrow$) | `shift_reg <= {shift_reg[6:0], miso_sync}` |
-| **`SCLK_HIGH`** | `3'b011` | `sclk_tick = 0` | `SCLK_HIGH` | `spi_cs_n = 0`, `spi_sclk = 1`, `busy = 1` | Mantiene nivel alto de `spi_sclk` |
-| **`SCLK_HIGH`** | `3'b011` | `sclk_tick & ~last_bit` | `SCLK_LOW` | `spi_sclk <= 0` (Flanco $\downarrow$) | `bit_cnt <= bit_cnt + 1`, `spi_mosi <= shift_reg[7]` |
-| **`SCLK_HIGH`** | `3'b011` | `sclk_tick & last_bit & ~byte_done` | `SCLK_LOW` | `spi_sclk <= 0` (Flanco $\downarrow$) | `rx_data <= shift_reg`, `byte_cnt++`, `bit_cnt <= 0`, `shift_reg <= next_byte` |
-| **`SCLK_HIGH`** | `3'b011` | `sclk_tick & last_bit & byte_done` | `STOP` | `spi_sclk <= 0` (Flanco $\downarrow$) | `rx_data <= shift_reg` (captura byte final). *Nota: `byte_done` se activa si `byte_cnt == len - 1`* |
-| **`STOP`** | `3'b100` | `sclk_tick = 0` | `STOP` | `spi_cs_n = 0`, `spi_sclk = 0`, `busy = 1` | Retiene `spi_cs_n = 0` (*hold* $T_{\text{half}}$) |
-| **`STOP`** | `3'b100` | `sclk_tick = 1` | `IDLE` | `spi_cs_n <= ~cs_hold`, **`done <= 1`** ($t_f$) | **La señal `done` se enclava (latch) indefinidamente** |
+| ID | Estado Actual | Código | Condición de Transición | Estado Siguiente | Salidas de Control (`Moore` / `Mealy`) | Transferencias RT en el Camino de Datos |
+| :---: | :--- | :---: | :--- | :---: | :--- | :--- |
+| **T0** | *Cualquiera* | `---` | `rst = 1` | `IDLE` | `spi_cs_n <= 1`, `spi_sclk <= 0`, `busy <= 0`, `done <= 0` | `bit_cnt <= 0`, `byte_cnt <= 0`, `shift_reg <= 8'h00`, `rx_data <= 8'h00`, `len <= 3'd1` |
+| **T1** | **`IDLE`** | `3'b000` | `rst = 0 & start = 0` | `IDLE` | `spi_cs_n = ~cs_hold`, `spi_sclk = 0`, `busy = 0` | Mantiene registros sin cambios (retiene el valor actual de `done`) |
+| **T2** | **`IDLE`** | `3'b000` | `rst = 0 & start = 1` | `LOAD_CMD` | `busy <= 1`, `done <= 0` | `cmd_reg <= cmd`, `addr_reg <= addr`, `tx_reg <= tx_data`, `len <= decodificar_len(cmd)` |
+| **T3** | **`LOAD_CMD`** | `3'b001` | `sclk_tick = 0` | `LOAD_CMD` | `spi_sclk = 0`, `busy = 1` | Espera sincronización con el siguiente pulso `sclk_tick` |
+| **T4** | **`LOAD_CMD`** | `3'b001` | `sclk_tick = 1` | `SCLK_LOW` | `spi_cs_n <= 0` ($t_0$) | `bit_cnt <= 0`, `byte_cnt <= 0`, `shift_reg <= cmd_reg`, `spi_mosi <= cmd_reg[7]` |
+| **T5** | **`SCLK_LOW`** | `3'b010` | `sclk_tick = 0` | `SCLK_LOW` | `spi_cs_n = 0`, `spi_sclk = 0`, `busy = 1` | Mantiene `spi_mosi` estable (establecimiento $T_{\text{half}}$) |
+| **T6** | **`SCLK_LOW`** | `3'b010` | `sclk_tick = 1` | `SCLK_HIGH` | `spi_sclk <= 1` (Flanco $\uparrow$) | `shift_reg <= {shift_reg[6:0], miso_sync}` (muestrea bit recibido) |
+| **T7** | **`SCLK_HIGH`** | `3'b011` | `sclk_tick = 0` | `SCLK_HIGH` | `spi_cs_n = 0`, `spi_sclk = 1`, `busy = 1` | Mantiene nivel alto de `spi_sclk` |
+| **T8** | **`SCLK_HIGH`** | `3'b011` | `sclk_tick & ~bit_done` | `SCLK_LOW` | `spi_sclk <= 0` (Flanco $\downarrow$) | `bit_cnt <= bit_cnt + 1`, `spi_mosi <= shift_reg[7]` |
+| **T9** | **`SCLK_HIGH`** | `3'b011` | `sclk_tick & bit_done & ~byte_done` | `SCLK_LOW` | `spi_sclk <= 0` (Flanco $\downarrow$) | `rx_data <= shift_reg`, `byte_cnt <= byte_cnt + 1`, `bit_cnt <= 0`, `shift_reg <= next_byte`, `spi_mosi <= next_byte[7]` |
+| **T10** | **`SCLK_HIGH`** | `3'b011` | `sclk_tick & bit_done & byte_done` | `STOP` | `spi_sclk <= 0` (Flanco $\downarrow$) | `rx_data <= shift_reg` (captura del último byte de la trama) |
+| **T11** | **`STOP`** | `3'b100` | `sclk_tick = 0` | `STOP` | `spi_cs_n = 0`, `spi_sclk = 0`, `busy = 1` | Retiene `spi_cs_n = 0` (retención $T_{\text{half}}$) |
+| **T12** | **`STOP`** | `3'b100` | `sclk_tick = 1` | `IDLE` | `spi_cs_n <= ~cs_hold`, `busy <= 0`, `done <= 1` ($t_f$) | Activa `done` como bandera síncrona retenida en registro hasta el próximo `start = 1` o `rst = 1` |
+
+#### Definición de Condiciones y Señales Auxiliares del Camino de Datos
+
+- **Banderas de conteo:**
+  - `bit_done = (bit_cnt == 3'd7)`
+  - `byte_done = (byte_cnt == len - 3'd1)`
+- **Decodificación dinámica de longitud (`len` según `cmd`):**
+  - `0x06` (*Write Enable*) $\rightarrow$ `len = 1` ($1$ byte).
+  - `0x20` (*Sector Erase*) $\rightarrow$ `len = 4` ($1$ byte comando + $3$ bytes dirección).
+  - `0x03` (*Read Data*) / `0x02` (*Page Program*) $\rightarrow$ `len = 5` ($1$ byte comando + $3$ bytes dirección + $1$ byte dato).
+- **Multiplexor de siguiente byte (`next_byte` según `byte_cnt`):**
+  - `byte_cnt == 0` $\rightarrow$ `addr_reg[23:16]`
+  - `byte_cnt == 1` $\rightarrow$ `addr_reg[15:8]`
+  - `byte_cnt == 2` $\rightarrow$ `addr_reg[7:0]`
+  - `byte_cnt >= 3` $\rightarrow$ `tx_reg` (en lectura `0x03` envía `8'h00` como byte de relleno).
+
 ---
 
 ## 4. Inferencia y Manejo de BRAM Dual-Port
