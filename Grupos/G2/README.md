@@ -4,24 +4,26 @@
 
 ## 1. Delimitación y Selección de Tecnologías de Memoria
 
-Trabajamos sobre la **Sipeed Tang Nano 9K** (FPGA Gowin GW1NR-9), usando el flujo abierto **Yosys + nextpnr** y el procesador **FemtoRV32** con arquitectura Von Neumann. Como la memoria interna **BSRAM** de esta FPGA es limitada —en total son $58.5\text{ KB}$ repartidos en $26$ bloques de $18\text{ Kbit}$— y debemos compartirla entre el código del procesador y el video, dividimos el almacenamiento en dos niveles:
+Trabajamos sobre la **Sipeed Tang Nano 9K** (FPGA Gowin GW1NR-9), usando el flujo abierto **Yosys + nextpnr** y el procesador **FemtoRV32** (reloj maestro de $27\text{ MHz}$) con arquitectura Von Neumann. Como la memoria interna **BSRAM** de esta FPGA es limitada —en total son $58.5\text{ KB}$ repartidos en $26$ bloques de $18\text{ Kbit}$— y se comparte entre el código del procesador y el video gestionado por G4, dividimos el almacenamiento del sistema en dos niveles:
 
 ### 1.1 Comparativa y Justificación de Tecnologías de Memoria
 
 | Tecnología de Memoria | Componente / Modelo | Capacidad | Protocolo e Interfaz | Pines Físicos | Velocidad / Latencia | Rol y Justificación en la Consola |
 | :--- | :--- | :---: | :--- | :---: | :--- | :--- |
-| **BSRAM Interna** *(Nivel 1 — En uso)* | Bloques `SDPB` del chip Gowin GW1NR-9 | $58.5\text{ KB}$ ($26 \times 18\text{ Kbit}$) | Bus paralelo síncrono Dual-Port ($27\text{ MHz}$) | $0$ externos (interna) | $1$ ciclo de reloj ($37.04\text{ ns}$) | Guarda el programa/datos del CPU ($32\text{ KB}$) y el framebuffer Dual-Port ($1.5\text{ KB}$) acordado con G4, permitiendo leer video sin frenar al procesador. |
-| **Flash NOR SPI Externa** *(Nivel 2 — En uso)* | Winbond `W25Q64JV` (en placa o módulo DIP8) | $8\text{ MB}$ ($64\text{ Mbit}$) | SPI síncrono Modo 0 (`CS#`, `SCLK`, `MOSI`, `MISO`) | $4$ pines | $f_{\text{SCLK}} = 3.375\text{ MHz}$ ($2.37~\mu\text{s/byte}$) | Almacena de forma no volátil los *sprites* 2D, mapas de nivel, tablas de sonido y puntajes máximos (*High-Scores*) escribiendo directo por sector. |
-| **PSRAM / SRAM Externa** *(Descartada)* | `APS6404L` / `IS61WV25616` | $8\text{ MB}$ / $512\text{ KB}$ | QSPI / Bus paralelo asíncrono | $6$ a $38$ pines | Media / Alta | No hace falta: el framebuffer de G4 pesa apenas $1.5\text{ KB}$ y cabe completo en la BSRAM interna sin gastar pines ni meter latencia al barrido HUB75. |
+| **BSRAM Interna** *(Nivel 1 — En uso)* | Bloques `SDPB` del chip Gowin GW1NR-9 | $58.5\text{ KB}$ ($26 \times 18\text{ Kbit}$) | Bus paralelo síncrono ($27\text{ MHz}$) | $0$ externos (interna) | $1$ ciclo de reloj ($37.04\text{ ns}$) | Aloja la memoria principal de programa/datos del CPU ($32\text{ KB}$, incluyendo los $6$ registros reservados para los dos controles). Además, la FPGA aloja internamente el framebuffer ($1.5\text{ KB}$) instanciado directamente dentro del periférico HUB75 de G4. |
+| **Flash NOR SPI Externa** *(Nivel 2 — En uso)* | Winbond `W25Q64JV` (en placa o módulo DIP8) | $8\text{ MB}$ ($64\text{ Mbit}$) | SPI síncrono Modo 0 (`CS#`, `SCLK`, `MOSI`, `MISO`), región MMIO `0x0045` | $4$ pines | $f_{\text{SCLK}} = 3.375\text{ MHz}$ ($2.37~\mu\text{s/byte}$) | Almacena de forma no volátil los *sprites* 2D, mapas de nivel, tablas de sonido y puntajes máximos (*High-Scores*) escribiendo directo por sector. |
+| **PSRAM / SRAM Externa** *(Descartada)* | `APS6404L` / `IS61WV25616` | $8\text{ MB}$ / $512\text{ KB}$ | QSPI / Bus paralelo asíncrono | $6$ a $38$ pines | Media / Alta | No hace falta: el firmware cabe en los $32\text{ KB}$ de BSRAM interna y el framebuffer de G4 ($1.5\text{ KB}$) también reside en BSRAM sin gastar pines ni introducir latencia al barrido HUB75. |
 | **EEPROM $\text{I}^2\text{C}$** *(Descartada)* | Microchip `AT24C256` | $32\text{ KB}$ ($256\text{ Kbit}$) | $\text{I}^2\text{C}$ (`SDA`, `SCL`) | $2$ pines | $100\text{–}400\text{ kHz}$ (lenta) | Redundante teniendo $8\text{ MB}$ libres en la Flash `W25Q64JV`, donde podemos borrar sectores de $4\text{ KB}$ (`0x20`) y grabar páginas (`0x02`) para los *High-Scores*. |
 
 ### 1.2 Presupuesto de BSRAM Interna en la Tang Nano 9K
 
-Los $26$ bloques BSRAM ($58.5\text{ KB}$) disponibles en la Gowin GW1NR-9 quedan repartidos así:
+Los $26$ bloques BSRAM ($58.5\text{ KB}$) disponibles en la Gowin GW1NR-9 quedan contabilizados así en el SoC:
 
-1. **`BRAM_PROG_DATA` (`0x0000_0000` – `0x0000_7FFF`):** $32.0\text{ KB}$ ($15$ bloques BSRAM) para el firmware en C/RISC-V de los juegos arcade (definidos por G6), el *stack* y las variables de estado.
-2. **`FRAMEBUFFER_BRAM` (`0x2000_0000` – `0x2000_3FFF`):** $1.5\text{ KB}$ ($2$ bloques BSRAM configurados como *Simple Dual-Port* de $2048 \times 3$ bits), siguiendo la arquitectura del subgrupo G4.
-3. **Reserva libre:** Nos quedan $25.0\text{ KB}$ ($9$ bloques BSRAM) disponibles por si se necesitan tablas de audio o caché de *sprites* activos en RAM.
+1. **`BRAM_PROG_DATA` (`0x0000_0000` – `0x0000_7FFF`) — Gestionada por G2:** $32.0\text{ KB}$ ($15$ bloques BSRAM) para el firmware en C/RISC-V de los juegos arcade (G6), el *stack*, las variables de estado y la zona reservada de **$6$ registros para los dos controles**:
+   * **Control 1 (J1):** direcciones `42` (`CTRL1_JOY_X`), `43` (`CTRL1_JOY_Y`) y `44` (`CTRL1_ATAQUE`).
+   * **Control 2 (J2):** direcciones `45` (`CTRL2_JOY_X`), `46` (`CTRL2_JOY_Y`) y `47` (`CTRL2_ATAQUE`).
+2. **Framebuffer HUB75 (`0x0044_4000`) — Instanciado internamente por G4:** $1.5\text{ KB}$ ($2$ bloques BSRAM en modo *Simple Dual-Port*). *Nota de integración:* G2 ya no instancia ni mapea `FRAMEBUFFER_BRAM` en `0x2000_0000`, pues el subgrupo G4 lo absorbió dentro de su propio periférico (`0x0044`); se incluye aquí únicamente para llevar el balance real de bloques físicos de la FPGA.
+3. **Reserva libre:** Quedan $25.0\text{ KB}$ ($9$ bloques BSRAM) disponibles en la FPGA para futuras tablas de audio (G5 I2S) o caché de *sprites* activos en RAM.
 
 ---
 
