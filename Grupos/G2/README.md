@@ -129,7 +129,7 @@ Dividimos el controlador en cuatro bloques síncronos gobernados por el reloj ú
 
 En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\text{CPOL} = 0$, $\text{CPHA} = 0$), tomando como ejemplo una transacción estándar de lectura de $5$ bytes ($1$ byte `Cmd` + $3$ bytes `Addr` + $1$ byte `Data`) y la opción de lectura continua manteniendo la línea de selección activa (`cs_hold = 1`):
 
-![Diagrama de Tiempos SPI Modo 0](img/diagrama_tiempos_spi_g2.png)
+![Diagrama de Tiempos SPI Modo 0](img/diagrama_tiempos_spi_g2.drawio.svg)
 
 #### Secuencia Temporal Paso a Paso
 
@@ -171,7 +171,7 @@ En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\te
 
 En el diagrama de flujo comportamental se clasifica cada operación según el bloque que la ejecuta: **Unidad de Control (amarillo)**, **Camino de Datos (verde)** o **Reinicio Compartido (gris)**:
 
-![Diagrama de Flujo Funcional y Clasificación FSMD](img/flujo_funcional_spi_g2.png)
+![Diagrama de Flujo Funcional y Clasificación FSMD](img/flujo_funcional_spi_g2.drawio.svg)
 
 - **Longitud de trama dinámica (`byte_done`):** Para soportar transacciones de diferente tamaño, el camino de datos no utiliza un límite fijo de bytes. Al arrancar, decodifica el código de operación (`cmd_reg`) para definir la longitud total de la transferencia en un registro interno `len` (por ejemplo, si el comando es `0x06` WREN, `len = 1`; si es `0x20` borrado de sector, `len = 4`; para lectura o escritura simple, `len = 5`). La bandera `byte_done` se activa dinámicamente cuando el contador alcanza esta longitud.
 - **Retención de señal (`done` retenido):** Para evitar que el procesador FemtoRV32 (que consulta el estado de forma periódica a una frecuencia distinta) pierda la bandera de finalización, la señal `done` dejó de ser un pulso de un solo ciclo. Ahora opera como una bandera retenida en registro que permanece en `1` tras finalizar el estado `STOP` y solo se limpia (`0`) cuando el procesador inicia una nueva transmisión con `start = 1`.
