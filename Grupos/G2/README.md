@@ -123,16 +123,11 @@ Dividimos el controlador en cuatro bloques síncronos gobernados por el reloj ú
 2. **Pulso de habilitación (`sclk_tick`):** En lugar de crear un reloj derivado con divisores combinacionales, `spi_tick_gen` genera un **pulso de habilitación de 1 ciclo de `clk`** cada $N = 4$ ciclos del oscilador base. Todo el hardware queda en un solo dominio de reloj.
 3. **Salidas registradas:** Las líneas `spi_cs_n`, `spi_sclk` y `spi_mosi` salen directo de registros síncronos para evitar *glitches* en los pines físicos hacia la memoria.
 
-
-
-
----ªªªªªªªªªªºººººººººººººººººººººººººººººººººººººººººººººººººººººººººººººººº
-
-
+---
 
 ### 3.3 Diagrama de Tiempos SPI Modo 0 y Análisis Temporal
 
-En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\text{CPOL} = 0$, $\text{CPHA} = 0$), junto con la trama completa de $5$ bytes ($1$ byte `Cmd` + $3$ bytes `Addr` + $1$ byte `Data`) y la extensión en ráfaga (`cs_hold = 1`):
+En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\text{CPOL} = 0$, $\text{CPHA} = 0$), tomando como ejemplo una transacción estándar de lectura de $5$ bytes ($1$ byte `Cmd` + $3$ bytes `Addr` + $1$ byte `Data`) y la opción de lectura continua manteniendo la línea de selección activa (`cs_hold = 1`):
 
 ![Diagrama de Tiempos SPI Modo 0](img/diagrama_tiempos_spi_g2.png)
 
@@ -140,9 +135,9 @@ En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\te
 
 1. **Reposo (`IDLE`):** `spi_cs_n = 1` (si `cs_hold = 0`), `spi_sclk = 0`, `busy = 0` y `done = 0` (o retiene el `1` de la transacción anterior).
 2. **Solicitud MMIO:** El CPU carga `SPI_CMD_ADDR` (`0x04`) y escribe `start = 1`. La FSM pone `busy = 1`, **limpia la bandera `done = 0`** y espera el siguiente pulso `sclk_tick`.
-3. **Inicio y *Setup* ($t_0$):** Al llegar `sclk_tick`, `spi_cs_n` baja a `0` y `spi_mosi` saca de inmediato el bit más significativo `D7`, garantizando un tiempo de establecimiento de $T_{\text{half}}$ antes del primer flanco de subida de `spi_sclk`.
-4. **Muestreo y desplazamiento (`D7` $\rightarrow$ `D0`):** En cada **flanco de subida** de `spi_sclk`, el datapath captura `miso_sync`; en cada **flanco de bajada**, actualiza `spi_mosi` con el siguiente bit.
-5. **Parada y *Hold* ($t_f$):** Después del último flanco de bajada (`D0`), `spi_cs_n` se mantiene en bajo medio período más ($T_{\text{half}}$). En $t_f$, `spi_cs_n` vuelve a `~cs_hold`, `busy` pasa a `0` y **`done` se establece en `1` (funcionando como un *latch* o registro retenido hasta que el CPU envíe un nuevo `start`).**
+3. **Inicio y establecimiento ($t_0$):** Al llegar `sclk_tick`, `spi_cs_n` baja a `0` y `spi_mosi` coloca de inmediato el bit más significativo `D7`, garantizando un tiempo de establecimiento de $T_{\text{half}}$ antes del primer flanco de subida de `spi_sclk`.
+4. **Muestreo y desplazamiento (`D7` $\rightarrow$ `D0`):** En cada **flanco de subida** de `spi_sclk`, el camino de datos captura `miso_sync`; en cada **flanco de bajada**, actualiza `spi_mosi` con el siguiente bit.
+5. **Parada y retención ($t_f$):** Después del último flanco de bajada (`D0`), `spi_cs_n` se mantiene en bajo medio período más ($T_{\text{half}}$). En $t_f$, `spi_cs_n` vuelve a `~cs_hold`, `busy` pasa a `0` y **`done` se establece en `1` (bandera retenida en registro hasta que el CPU envíe un nuevo `start`).**
 
 #### Cálculos Temporales y Ancho de Banda ($f_{\text{clk}} = 27\text{ MHz}$, $N = 4$)
 
@@ -164,9 +159,9 @@ En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\te
 
     $$T_{\text{lectura 1B}} = 40 \cdot T_{\text{SCLK}} + 2 \cdot T_{\text{half}} \approx 12.15~\mu\text{s}$$
 
-  - **Carga en ráfaga de un *sprite* de $16 \times 16$ píxeles ($256$ bytes con `cs_hold = 1`):**
+- **Lectura continua de un gráfico de $16 \times 16$ píxeles ($256$ bytes manteniendo `spi_cs_n = 0` sin liberar el bus con `cs_hold = 1`):**
 
-    $$T_{\text{sprite } 16\times 16} = (4 + 256) \cdot T_{\text{byte}} \approx 616.3~\mu\text{s}$$
+    $$T_{\text{gráfico } 16\times 16} = (4 + 256) \cdot T_{\text{byte}} \approx 616.3~\mu\text{s}$$
 
     *(Equivale a menos del $3.7\%$ del presupuesto de cuadro de $16.67\text{ ms}$ a $60\text{ Hz}$).*
 
@@ -174,13 +169,13 @@ En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\te
 
 ### 3.4 Diagrama de Flujo Funcional y Clasificación FSMD
 
-En el diagrama de flujo comportamental clasificamos cada operación según el bloque que la ejecuta: **Unidad de Control (`Candidate Control` en amarillo)**, **Camino de Datos (`Candidate Datapath` en verde)** o **Reinicio Compartido (`Shared Reset` en gris)**:
+En el diagrama de flujo comportamental se clasifica cada operación según el bloque que la ejecuta: **Unidad de Control (amarillo)**, **Camino de Datos (verde)** o **Reinicio Compartido (gris)**:
 
 ![Diagrama de Flujo Funcional y Clasificación FSMD](img/flujo_funcional_spi_g2.png)
 
-- **Longitud de Trama Dinámica (`byte_done`):** Para soportar transacciones de diferente tamaño, el datapath no usa un límite fijo de bytes. Al arrancar, decodifica el código de operación (`cmd_reg`) para definir la longitud total de la transferencia en un registro interno `len` (por ejemplo, si el comando es `0x06` WREN, `len = 1`; si es `0x20` Sector Erase, `len = 4`; para lectura/escritura normal, `len = 5`). La bandera `byte_done` se activa dinámicamente cuando el contador alcanza esta longitud.
-- **Retención de Señal (`done` como *Latch*):** Para evitar que el procesador FemtoRV32 (que lee el estado mediante *polling* a una frecuencia diferente) pierda la bandera de finalización, la señal `done` dejó de ser un pulso de un solo ciclo. Ahora es un *latch* (registro retenido) que se queda en `1` tras terminar el estado `STOP` y solo se borra (`0`) cuando el procesador inicia una nueva transmisión con `start = 1`.
-- **Gestión de Transferencias Múltiples (`cs_hold`):** El uso de `cs_hold` le da al procesador control directo sobre la línea física. Sin embargo, para la memoria `W25Q64JV`, **cada vez que se baja el `CS_N` (Chip Select) se debe enviar el comando y la dirección nuevamente**. No es posible reanudar una lectura soltando el bus y retomándolo sin retransmitir la cabecera completa.
+- **Longitud de trama dinámica (`byte_done`):** Para soportar transacciones de diferente tamaño, el camino de datos no utiliza un límite fijo de bytes. Al arrancar, decodifica el código de operación (`cmd_reg`) para definir la longitud total de la transferencia en un registro interno `len` (por ejemplo, si el comando es `0x06` WREN, `len = 1`; si es `0x20` borrado de sector, `len = 4`; para lectura o escritura simple, `len = 5`). La bandera `byte_done` se activa dinámicamente cuando el contador alcanza esta longitud.
+- **Retención de señal (`done` retenido):** Para evitar que el procesador FemtoRV32 (que consulta el estado de forma periódica a una frecuencia distinta) pierda la bandera de finalización, la señal `done` dejó de ser un pulso de un solo ciclo. Ahora opera como una bandera retenida en registro que permanece en `1` tras finalizar el estado `STOP` y solo se limpia (`0`) cuando el procesador inicia una nueva transmisión con `start = 1`.
+- **Gestión de transferencias múltiples (`cs_hold`):** El bit `cs_hold` permite mantener `spi_cs_n` en bajo durante una lectura continua en ráfaga. Sin embargo, por especificación de la memoria `W25Q64JV`, **cada vez que se libera `spi_cs_n` (sube a `1`) y se vuelve a bajar, es obligatorio reenviar el comando y la dirección de $24$ bits**; no es posible pausar una lectura soltando el bus y retomarla sin retransmitir la cabecera completa.
 
 ---
 
