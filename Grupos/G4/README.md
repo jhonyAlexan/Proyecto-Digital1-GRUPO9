@@ -397,7 +397,6 @@ Cómo simular (Icarus Verilog y GTKWave), desde `Grupos/G4/`:
     make sim-regs     # banco de registros
     make wave-core    # abre la simulación del core en GTKWave
     make clean
-```
 
 #### 11.1 Banco del core
 
@@ -420,6 +419,7 @@ Para comprobar que el banco detecta errores se introdujeron fallas a propósito 
 Figura 15: Cambio de fila en GTKWave (`DT = 16`, `BRIGHT = 5`): últimas columnas de SHIFT, `last_col` y `clear_col` en la columna 63, el tick de LATCH con `lat` alto y `load_row`, DISPLAY con `cnt` de 0 a 15 y `oe` activo los primeros 5 ticks, y el paso a la fila siguiente con `inc_row`.
 
 > Uso de IA: el RTL y el banco se elaboraron con ayuda de un asistente de IA a partir de las secciones 7 a 9 y de la tabla de transferencias. La captura de GTKWave es propia.
+
 ---
 ### Referencias
 - Guía del curso: UART 8N1, control combinacional y actualización conjunta en subida, e integración con FemtoRV32 Quark (uart-riscv.pdf).
