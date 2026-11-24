@@ -106,7 +106,9 @@ La tabla muestra qué ocurre con los dos relojes posibles: 27 MHz, el de la Tang
 | 27 MHz | 512 | 16 | 52 734 Hz | ninguno, supera 50,4 kHz |
 | 27 MHz | 1024 | 32 | 26 367 Hz | ninguno |
 
-Por eso el diseño tiene un parámetro, `CICLOS_BCLK`, que vale 18 con HCLK = 27 MHz y 16 con 25 MHz. La trama dura 32 × `CICLOS_BCLK` ciclos (576 o 512) y la cuentan dos contadores encadenados (2.3.3). Para cualquier otro reloj se elige el k entero que deje fs dentro de un intervalo. El resto de los requisitos se cumple con el diseño: BCLK de 1,5 MHz con 27 MHz y de 1,5625 MHz con 25 MHz, 16 bits por slot, formato I2S y sin MCLK. Como el fabricante declara no soportada una LRCLK fuera de los intervalos, fs queda siempre dentro de uno de ellos.
+Por eso el diseño tiene un parámetro, `CICLOS_BCLK`, que vale 18 con HCLK = 27 MHz y 16 con 25 MHz. La trama dura 32 × `CICLOS_BCLK` ciclos (576 o 512) y la cuentan dos contadores encadenados (2.3.3). Para cualquier otro reloj se elige el k entero que deje fs dentro de un intervalo. El resto de los requisitos se cumple con el diseño: BCLK de 1,5 MHz con 27 MHz y de 1,5625 MHz con 25 MHz, 16 bits por slot, formato I2S y sin MCLK. La ficha solo nombra cuatro frecuencias no soportadas (11,025, 12, 22,05 y 24 kHz) [5, p. 16]. Las fs de este diseño (46 875 y 48 828 Hz) no son frecuencias estándar, pero caen dentro del intervalo fS3 de la tabla eléctrica [5, p. 6]. El fabricante no garantiza expresamente valores intermedios, por eso la fs se valida en la placa (sección 6).
+
+Hay además dos condiciones de la ficha. La primera: con LRCLK de ciclo de trabajo 50 % el formato lo fija el modelo (A: I2S, B: justificado a la izquierda), mientras que un pulso corto de sincronía activa el modo TDM automáticamente [5, p. 16]. Por eso LRCLK vale 0 durante 16 BCLK y 1 durante 16 BCLK. La segunda: en el arranque, LRCLK debe empezar dentro de ½ período de LRCLK desde que empieza BCLK [5, p. 18], y no se debe quitar LRCLK mientras BCLK esté presente [5, p. 16 y 19]. El reset pone ambas señales en 0 y las dos salen de la misma máquina de tiempos. Según las transferencias T0 a T6 (3.6), con 27 MHz el primer flanco de subida de BCLK ocurre en el ciclo 9 tras el reset y el primer cambio de LRCLK en el 288, unos 279 ciclos de los 288 permitidos (cuenta por confirmar en simulación). Se cumple, pero con poco margen.
 
 ### 1.5 Muestras de 8 bits y uso de memoria
 
@@ -186,14 +188,14 @@ Las cifras de esta sección son las de HCLK = 27 MHz, el reloj de la Tang Nano 9
 
 ### 2.2 Conexiones del módulo MAX98357A
 
-El FPGA actúa como maestro I2S: BCLK, LRCLK y DIN son salidas del FPGA y entradas del módulo, y las tres trabajan a 3,3 V. El módulo no devuelve datos.
+El FPGA actúa como maestro I2S: BCLK, LRCLK y DIN son salidas del FPGA y entradas del módulo, y las tres trabajan a 3,3 V. El módulo no devuelve datos. El módulo usado es un amplificador I2S MAX98357A de 3 W clase D (genérico); su circuito integrado está marcado AKK, que en la tabla de pedidos corresponde al MAX98357A en encapsulado TQFN de 16 pines [5, p. 34].
 
 ```
 FPGA (peripheral_audio)              Módulo MAX98357A
 audio_bclk   ─────────────────────►  BCLK   reloj de bit, 1,5 MHz
 audio_lrclk  ─────────────────────►  LRC    reloj de trama, 46,875 kHz (0 = izq., 1 = der.)
 audio_din    ─────────────────────►  DIN    datos en serie, MSB primero
-3V3 o 5V     ─────────────────────►  VIN    alimentación (3,3 a 5 V)
+5V           ─────────────────────►  VIN    alimentación (2,7 a 5,5 V)
 GND          ─────────────────────►  GND    tierra común
 (sin conectar)                       GAIN   ganancia por cableado (9 dB)
 (sin conectar)                       SD     apagado y selección de canal
@@ -202,7 +204,7 @@ GND          ─────────────────────► 
 
 | Pin | Qué representa | Notas |
 |---|---|---|
-| VIN | Alimentación (3,3 a 5 V) | El clase D toma picos de corriente; con 5 V suena más fuerte. |
+| VIN | Alimentación del módulo (2,7 a 5,5 V) | El CI admite 2,5 a 5,5 V [5, p. 4 y 33]. El clase D toma picos de corriente; con 5 V entrega más potencia (3,2 W en 4 Ω a 5 V [5, p. 5]). |
 | GND | Referencia común de tierra | Obligatorio. Sin tierra común, BCLK, LRC y DIN no tienen referencia. |
 | BCLK | Reloj de bit | Marca cuándo leer DIN. |
 | LRC | Reloj de trama (LRCLK) | 0 = izquierdo, 1 = derecho. Su frecuencia es fs. |
@@ -211,9 +213,9 @@ GND          ─────────────────────► 
 | SD | Apagado y selección de canal | Ver abajo. |
 | + / − | Salida al parlante (4 a 8 Ω) | La salida es en puente: ningún terminal se conecta a GND. |
 
-**GAIN** (Tabla 8 del datasheet [5], con los mismos valores que el módulo DFRobot [6]): GAIN a GND por 100 kΩ → 15 dB; GAIN a GND → 12 dB; sin conectar → 9 dB; GAIN a VDD → 6 dB; GAIN a VDD por 100 kΩ → 3 dB. Se deja sin conectar (9 dB).
+**GAIN** (pin GAIN_SLOT del CI; Tabla 8 del datasheet [5, p. 28]): GAIN a GND por 100 kΩ → 15 dB; GAIN a GND → 12 dB; sin conectar → 9 dB; GAIN a VDD → 6 dB; GAIN a VDD por 100 kΩ → 3 dB. Se deja sin conectar (9 dB). En módulos similares [6] el valor por defecto también es 9 dB; en el módulo usado debe confirmarse con su esquema o con un multímetro (sección 6).
 
-**SD** (Tabla 5 del datasheet [5]): por debajo de 0,16 V el amplificador se apaga. Con 0,16 a 0,77 V sale la mezcla izquierdo/derecho; con 0,77 a 1,4 V el canal derecho; sobre 1,4 V el izquierdo. SD no se conecta al FPGA y queda como viene en el módulo. Como se envía la misma muestra en ambos slots, cualquier selección suena igual, y para silenciar el parlante se usa `CONTROL.ENABLE` = 0.
+**SD** (pin SD_MODE del CI; Tabla 5 del datasheet [5, p. 17]): por debajo del umbral B0 el amplificador se apaga; entre B0 y B1 sale la mezcla izquierdo/derecho; entre B1 y B2, el canal derecho; sobre B2, el izquierdo. Los valores típicos son B0 = 0,16 V, B1 = 0,77 V y B2 = 1,4 V, con rangos de 0,08 a 0,355 V, de 0,65 a 0,825 V y de 1,245 a 1,5 V [5, p. 7]. El CI tiene un pull-down interno de unos 100 kΩ en SD_MODE (92 a 108 kΩ) [5, p. 7]: en el CI solo, un SD sin conectar equivale a apagado, así que si el módulo suena sin conectar SD es porque la placa trae un pull-up. SD no se conecta al FPGA y queda como viene en el módulo. Su estado puede depender de la placa y de la tensión de alimentación, por eso se mide con multímetro en la sección 6; lo importante es que no baje de unos 0,16 V (apagado). Como se envía la misma muestra en ambos slots, cualquier selección suena igual, y para silenciar el parlante se usa `CONTROL.ENABLE` = 0.
 
 Los pines físicos de BCLK, LRCLK y DIN se asignan en 3.2.
 
@@ -273,8 +275,9 @@ Los valores se aplican en la siguiente muestra. Escribirlos mientras suena es se
 ### 2.5 Criterios de comprobación
 
 - BCLK tiene período de `CICLOS_BCLK` HCLK (18 con 27 MHz) y ciclo de trabajo 50 %.
-- LRCLK vale 0 durante 16 BCLK y 1 durante 16 BCLK; la trama dura 576 HCLK (512 con 25 MHz).
+- LRCLK vale 0 durante 16 BCLK y 1 durante 16 BCLK (ciclo de trabajo 50 %, que mantiene el modo I2S [5, p. 16]); la trama dura 576 HCLK (512 con 25 MHz).
 - El MSB aparece un BCLK después del cambio de LRCLK. DIN solo cambia en flancos de bajada de BCLK.
+- Tras el reset, el primer cambio de LRCLK ocurre a menos de 16 BCLK (288 HCLK con 27 MHz) del primer flanco de subida de BCLK [5, p. 18].
 - Los bits 7:0 de cada slot son cero. Ambos slots llevan la misma muestra.
 - Con `FREQ = 615` y `VOL = 64`, la salida alterna ±64 con frecuencia 439,88 Hz ± la resolución de la medición (con 25 MHz, `FREQ = 591` da 440,33 Hz).
 - Con `ENABLE = 0`, DIN vale 0 en todos los bits.
@@ -334,9 +337,9 @@ AUDIO_CONTROL = 1;    /* ENABLE = 1: suena */
 | `audio_bclk` | BCLK | 3,3 V (LVCMOS33) |
 | `audio_lrclk` | LRC | 3,3 V (LVCMOS33) |
 | `audio_din` | DIN | 3,3 V (LVCMOS33) |
-| 5 V de la placa | VIN | Alimentación del amplificador |
+| 5 V de la placa | VIN | Alimentación del amplificador (módulo: 2,7 a 5,5 V) |
 | GND | GND | Tierra común |
-| Sin conectar | GAIN, SD | 9 dB; silencio con `CONTROL.ENABLE` = 0 (2.2) |
+| Sin conectar | GAIN, SD | 9 dB (a confirmar en el módulo); silencio con `CONTROL.ENABLE` = 0 (2.2) |
 | Parlante de 4 a 8 Ω | + / − | Salida en puente, ningún terminal a GND |
 
 Las tres salidas van en un banco de 3,3 V. El número de pin de cada una queda en el archivo de restricciones de la placa, dentro de `rtl/placas/` (sección 6).
@@ -547,7 +550,7 @@ Para verlo en GTKWave, abre `make wave`, busca la escritura de FREQ = 32768 haci
 
 [4] Philips Semiconductors, «I2S bus specification», 1986, revisada el 5 de junio de 1996. Copia consultada en: https://www.fdi.ucm.es/profesor/mendias/PSyD/docs/I2SBUS.pdf (consultado el 12 de noviembre de 2026).
 
-[5] Maxim Integrated (hoy Analog Devices), «MAX98357A/MAX98357B: PCM Input Class D Audio Power Amplifiers», hoja de datos, Rev. 13, julio de 2019. Página del fabricante: https://www.analog.com/en/MAX98357A/datasheet. Copia consultada en: https://www.makerguides.com/wp-content/uploads/2026/01/Datasheet_MAX98357A.pdf (consultado el 13 de noviembre de 2026).
+[5] Analog Devices (antes Maxim Integrated), «MAX98357A/MAX98357B: Tiny, Low-Cost, PCM Class D Amplifier with Class AB Performance», hoja de datos, doc. 19-6779, Rev. 16, febrero de 2026. Página del fabricante: https://www.analog.com/en/MAX98357A/datasheet. Copia consultada: archivo de la hoja de datos que usa el equipo (consultado el 24 de noviembre de 2026). Los números de página citados en este documento son los de esa revisión.
 
 [6] DFRobot, «MAX98357A I2S Digital Amplifier Module (DFR0954)», wiki. Disponible en: https://wiki.dfrobot.com/SKU_DFR0954_MAX98357_I2S_Amplifier_Module (valores de GAIN y SD del módulo).
 
