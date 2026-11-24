@@ -34,13 +34,13 @@ $$
 \mathrm{fase}[n+1] = \left(\mathrm{fase}[n] + \mathrm{FREQ}\right) \bmod 2^{16}
 $$
 
-$$
+```math
 \mathrm{muestra}[n] =
 \begin{cases}
 {+}\mathrm{VOL} & \text{si } \mathrm{fase}_{15}[n] = 1 \\
 {-}\mathrm{VOL} & \text{si } \mathrm{fase}_{15}[n] = 0
 \end{cases}
-$$
+```
 
 El registro da una vuelta completa cada 2<sup>16</sup>/FREQ muestras, y en cada vuelta el bit 15 completa un ciclo. La frecuencia de salida es entonces:
 
@@ -432,15 +432,15 @@ El ASMD une la máquina de estados con la ruta de datos: para cada estado dice q
 
 Las condiciones usan dos señales que se calculan en el mismo ciclo:
 
-$$
-\text{tick} = (\text{cnt\_bclk} = 17) \qquad \text{fase\_sig} = \text{fase} + \text{FREQ}
-$$
+```math
+\mathrm{tick} = (\mathrm{cnt\_bclk} = 17) \qquad \mathrm{fase\_sig} = \mathrm{fase} + \mathrm{FREQ}
+```
 
 La muestra `m` sale de `fase_sig`:
 
-$$
-m = \begin{cases} 0 & \text{si EN} = 0 \\ +\text{VOL} & \text{si fase\_sig}[15] = 1 \\ -\text{VOL} & \text{si fase\_sig}[15] = 0 \end{cases}
-$$
+```math
+m = \begin{cases} 0 & \text{si } \mathrm{EN} = 0 \\ +\mathrm{VOL} & \text{si } \mathrm{fase\_sig}[15] = 1 \\ -\mathrm{VOL} & \text{si } \mathrm{fase\_sig}[15] = 0 \end{cases}
+```
 
 | T | Estado | Condición | Transferencias |
 |---|---|---|---|

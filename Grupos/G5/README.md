@@ -12,13 +12,13 @@ Carpeta del equipo G5 dentro del proyecto **Consola de videojuegos sobre FPGA** 
 
 ```
 G5/
-├── README.md         Este archivo: resumen, estado de la documentación y preguntas abiertas
+├── README.md         Este archivo: resumen, decisiones, estado y registro de avances
 ├── joystick/
 │   ├── README.md     Documentación del periférico, en el orden del flujo de diseño
 │   ├── diagramas/    Caja negra, bloques, flujo y máquinas de estado
 │   ├── rtl/          Verilog, testbench, Makefile y configuración de GTKWave
 │   ├── firmware/     Driver en C para el procesador femtoRV32
-│   └── esp32/        Programa de la ESP32 que lee el joystick y envía las lecturas por UART
+│   └── esp32/        Programa de prueba que lee el joystick con el ADC de la ESP32
 └── audio/
     ├── README.md     Documentación del periférico, en el orden del flujo de diseño
     ├── diagramas/
@@ -32,24 +32,34 @@ Cada periférico sigue la estructura `cores/<periferico>/` de la plantilla del c
 
 | Periférico | Sentido | Funcionamiento general |
 |---|---|---|
-| Joystick | El procesador **lee** | Una ESP32 lee el joystick analógico (dos ejes y un botón) y envía las lecturas por UART a la FPGA. El periférico recibe los paquetes y deja los valores en registros que el procesador lee por el bus. |
-| Audio | El procesador **escribe** | El procesador escribe en registros qué sonido generar y el periférico produce la señal hacia el parlante. Método de generación por definir. |
+| Joystick | El procesador **lee** | Cada jugador tiene un mando inalámbrico: una FPGA lee el joystick, a través del ADC de un Arduino, y la IMU, y envía los datos a la consola. El periférico recibe los paquetes y deja los valores en registros que el procesador lee por el bus. |
+| Audio | El procesador **escribe** | El procesador escribe en registros la frecuencia y el volumen del tono, y el periférico lo envía por I2S al amplificador MAX98357A, que maneja el parlante. |
 
 Los dos son **periféricos mapeados en memoria**: el procesador solo lee y escribe direcciones, y cada periférico ocupa una ventana propia del mapa de memoria. El mapa de registros de cada uno es el contrato con el resto de la consola: quien programe el juego solo necesita ese mapa, no el circuito interno.
 
 ## Interfaz común con el procesador
 
-Según el contrato del curso (ver `template/diagramas/`), todo periférico se conecta al bus con estas señales:
+Los dos periféricos usan las mismas señales hacia el bus:
 
 | Señal | Descripción |
 |---|---|
 | `clk` | Reloj común del SoC |
 | `rst` | Reinicio síncrono, activo en alto |
 | `cs` | Selección del periférico, activa durante un ciclo por acceso |
-| `addr` | Desplazamiento en bytes dentro de la ventana del periférico |
+| `addr[3:0]` | Desplazamiento en bytes dentro de la región del periférico |
 | `rd`, `wr` | Tipo de acceso: lectura o escritura |
 | `d_in[31:0]` | Dato que escribe el procesador |
-| `d_out[31:0]` | Dato que lee el procesador |
+| `d_out[31:0]` | Dato que lee el procesador, registrado |
+| `ack` | Vale 1 el ciclo siguiente a `cs`: marca el ciclo en que `d_out` es válido |
+
+`ack` no está en el contrato base del curso. Los dos periféricos lo agregan porque `d_out` es registrado; si el adaptador del SoC ya espera un ciclo en cada lectura, puede dejarlo sin conectar.
+
+Cada periférico ocupa una región del mapa de memoria, y `cs` sale de `mem_addr[31:16]`:
+
+| Periférico | Región | Registros |
+|---|---|---|
+| Audio | `0x0043` | `FREQ` (`0x0043_0000`), `VOL` (`0x0043_0004`), `CONTROL` (`0x0043_0008`) |
+| Joystick | `0x0047` | `JOY1_DATA` (`0x0047_0000`), `JOY2_DATA` (`0x0047_0004`), `STATUS` (`0x0047_0008`); se amplían cuando se defina la IMU |
 
 ## Placas
 
@@ -57,7 +67,7 @@ El destino final es la consola tipo Game Boy del profesor. La Tang Nano 9K es la
 
 | Placa | Uso | FPGA | Reloj de la placa |
 |---|---|---|---|
-| Consola tipo Game Boy del profesor | Destino final | Por identificar | Por identificar |
+| Consola tipo Game Boy del profesor | Destino final | La define el profesor | Entra como parámetro |
 | Tang Nano 9K | Pruebas del G5 | Gowin GW1NR-9 | 27 MHz |
 
 Para que el diseño sea portable:
@@ -72,7 +82,7 @@ La documentación de cada periférico sigue el **diseño descendente**: de lo m�
 
 ## Estado de la documentación
 
-Estados posibles: `Pendiente`, `En progreso`, `Hecho`. Una sección está `Hecho` solo cuando cumple el criterio escrito en el README del periférico.
+Estados posibles: `Pendiente`, `En progreso`, `Hecho`. Una sección está `Hecho` cuando su contenido está completo en el README del periférico.
 
 | # | Sección | Joystick | Audio |
 |---|---|---|---|
@@ -88,53 +98,29 @@ Estados posibles: `Pendiente`, `En progreso`, `Hecho`. Una sección está `Hecho
 | 5.1 | Testbench, estímulos y observación | Pendiente | Hecho |
 | 6 | Implementación | Pendiente | Pendiente |
 
-## Preguntas abiertas
+## Decisiones del equipo
 
-Dudas que deben resolverse con las guías o con el profesor. Se marcan al quedar resueltas y la respuesta se anota debajo.
-
-**Sobre la documentación**
-- [ ] "Etapas de complementación": ¿significa implementación (síntesis y carga en la FPGA)?
-- [ ] "Clasificación del flujo": ¿es la separación entre ruta de datos y unidad de control?
-- [ ] ¿El equipo trabaja directamente en esta carpeta o en un repositorio propio que luego se integra al general, como describe el README raíz?
-
-**Sobre el SoC**
-- [ ] Modelo exacto de la consola tipo Game Boy del profesor: FPGA, herramienta de síntesis, pines disponibles y voltajes.
-- [ ] ¿La consola ya trae botones, cruceta, parlante o salida de audio? Si los trae, cambia el plan del joystick (ESP32) y del audio.
-- [ ] Frecuencia de `clk` del SoC en la consola; de ella depende el divisor de la UART del joystick.
-- [ ] ¿Quién define la plataforma final y el reloj del SoC?
-- [ ] Dirección base de cada periférico. `template/diagramas/` menciona `interfaces/memory_map.yml`, que aún no está en el repositorio.
-- [ ] Ancho de `addr` asignado a la ventana de cada periférico.
-
-**Sobre el joystick**
-- [ ] ¿El periférico tiene su propio receptor UART en Verilog, o se reutiliza la UART del SoC? La del SoC ya se usa como consola.
-- [ ] Voltaje del banco de pines que recibe la línea RX de la ESP32 (la ESP32 trabaja a 3,3 V).
-- [ ] Formato definitivo del paquete y frecuencia de envío, según lo que necesite el software del juego.
-
-**Sobre el audio**
-- [x] Hardware de salida: parlante, amplificador y método de generación (PWM, DAC u otro).
-  Respuesta: I2S hacia el amplificador MAX98357A y parlante de 4 a 8 Ω (audio, 1.7 y 3.2).
-- [x] Qué necesita el juego: tonos simples, notas, efectos o volumen.
-  Respuesta: tonos de onda cuadrada con frecuencia y volumen programables (audio, 2.1).
-- [x] Registros que escribe el procesador.
-  Respuesta: FREQ, VOL y CONTROL desde 0x00430000 (audio, 2.4 y 3.2).
+| Tema | Decisión |
+|---|---|
+| Reloj | 27 MHz, el de la Tang Nano 9K. Los dos periféricos lo reciben como parámetro, así que también funcionan con 25 MHz o con el reloj de la consola final. |
+| Lugar de trabajo | Directamente en `Grupos/G5`, una carpeta por periférico. |
+| Clasificación del flujo | Separación de cada diseño en ruta de datos y unidad de control. |
+| Joystick: mandos | Requisito del profesor: dos mandos inalámbricos. En cada mando, una FPGA recibe el joystick desde el ADC de un Arduino por UART y la IMU por I2C, y envía los datos a la consola. Están en definición el enlace inalámbrico, el módulo de IMU y el formato del paquete. |
+| Audio | I2S hacia el amplificador MAX98357A, con tonos de onda cuadrada de frecuencia y volumen programables. |
+| Consola final | Se integra cambiando parámetros, pines y el módulo superior; el núcleo de cada periférico no depende de la placa. |
 
 ## Convenciones del equipo
 
 - Nombres de carpetas y archivos sin espacios ni tildes: los Makefile y la terminal fallan con ellos.
 - Las señales se llaman igual en los diagramas, en el Verilog y en la documentación.
-- Ningún cambio se sube sin que otro integrante lo revise.
+- Cada aporte queda en el registro de avances, con su fecha y su autor.
 
 ## Registro de avances y aportes
 
-En esta sección se documentarán los principales avances, implementaciones, pruebas y contribuciones realizadas por el Grupo 5.
+Esta sección registra los avances, implementaciones, pruebas y aportes del equipo, en orden de fecha.
 
 | Fecha | Integrante(s) | Descripción del aporte | Estado |
 |---|---|---|---|
-| 2026-11-23 | James Velasquez Boyaca | Audio: etapa de diseño (3.1 a 3.6) con ocho figuras; sección 2 ajustada a 512 ciclos por trama. | Hecho |
-| 2026-11-23 | James Velasquez Boyaca | Audio: Verilog del periférico (4.1), un módulo por bloque. | Hecho |
-| 2026-11-23 | James Velasquez Boyaca | Audio: testbench con 7 casos, Makefile y vista de GTKWave (5.1); pasa con 25 y 27 MHz. | Hecho |
-| 2026-11-24 | James Velasquez Boyaca | Audio: ASMD dibujado a mano con tabla de transferencias, arquitectura de control y ruta de datos, conexión al SoC, 27 MHz como reloj principal y testbench con cobertura de T0 a T8. | Hecho |
-| 2026-11-24 | James Velasquez Boyaca | Audio: la caja negra de Andrés González se redibujó como figura 5 con las señales rd, d_out y ack; su versión original queda en el historial del repositorio. | Hecho |
 | 2026-11-09 | James Velásquez | Joystick · Crear la estructura de carpetas y el README del joystick. (`289c081`) | Hecho |
 | 2026-11-12 | jcastanedacr | Joystick · Agregar el fundamento inicial del joystick. (`eb45462`) | Hecho |
 | 2026-11-12 | jcastanedacr | Joystick · Integrar el fundamento en main mediante el PR #5. (`7d829f5`) | Hecho |
@@ -146,9 +132,15 @@ En esta sección se documentarán los principales avances, implementaciones, pru
 | 2026-11-19 | jcastanedacr | Joystick · Agregar el diagrama de flujo de adquisición y recepción. (`9da7cb4`) | Hecho |
 | 2026-11-19 | jcastanedacr | Joystick · Eliminar un encabezado duplicado de la interfaz. (`9aeb6ca`) | Hecho |
 | 2026-11-19 | jcastanedacr | Joystick · Ampliar el fundamento e ilustrar el recorrido de la señal. (`b70bddf`) | Hecho |
+| 2026-11-23 | James Velasquez Boyaca | Audio: etapa de diseño (3.1 a 3.6) con ocho figuras; sección 2 ajustada a 512 ciclos por trama. | Hecho |
+| 2026-11-23 | James Velasquez Boyaca | Audio: Verilog del periférico (4.1), un módulo por bloque. | Hecho |
+| 2026-11-23 | James Velasquez Boyaca | Audio: testbench con 7 casos, Makefile y vista de GTKWave (5.1); pasa con 25 y 27 MHz. | Hecho |
 | 2026-11-23 | James Velásquez | Joystick · Clasificar el flujo en ruta de datos y unidad de control. (`6431614`) | Hecho |
 | 2026-11-23 | James Velásquez | Joystick · Documentar las máquinas de estado UART y de paquetes con dos diagramas. (`a84131f`) | Hecho |
+| 2026-11-24 | James Velasquez Boyaca | Audio: ASMD dibujado a mano con tabla de transferencias, arquitectura de control y ruta de datos, conexión al SoC, 27 MHz como reloj principal y testbench con cobertura de T0 a T8. | Hecho |
+| 2026-11-24 | James Velasquez Boyaca | Audio: la caja negra de Andrés González se redibujó como figura 5 con las señales rd, d_out y ack; su versión original queda en el historial del repositorio. | Hecho |
+| 2026-11-24 | James Velasquez Boyaca | Equipo: README al día con el contrato común, las regiones del mapa, las decisiones del equipo y los requisitos de los mandos; fórmulas de audio que GitHub no dibujaba. | Hecho |
 
 ## Uso de herramientas de IA
 
-El equipo usa asistentes de IA (Claude y ChatGPT) como apoyo para redactar, dibujar figuras y proponer código. Cada aporte lo revisa y lo sube un integrante, que responde por su contenido. Los commits hechos con esa ayuda lo indican con la línea `Co-Authored-By` del mensaje.
+El equipo usa asistentes de IA (Claude y ChatGPT) como apoyo para redactar, dibujar figuras y proponer código. Cada aporte lo revisa y lo sube un integrante, que responde por su contenido. Algunos commits del 23 de noviembre lo indican con la línea `Co-Authored-By`; desde el 24 de noviembre la declaración queda solo en esta sección.
