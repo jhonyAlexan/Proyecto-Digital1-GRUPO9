@@ -361,7 +361,7 @@ La guía usa `START`, `BUSY` y `DONE` para periféricos que hacen una operación
 
 Escribir píxeles durante el barrido: la escritura usa un puerto de la memoria y el barrido el otro, en el mismo ciclo y sin espera. Copiar una imagen completa son 4096 `sw`; con un lazo de unas 4 instrucciones por píxel y del orden de 4 ciclos por instrucción en Quark serían unos 65 000 ciclos, ≈ 2,4 ms a 27 MHz, dentro de los 16,7 ms de un cuadro a 60 FPS. Esta cifra es una estimación y se debe medir en la integración.
 
-
+> Uso de IA: el texto de las secciones 10.1 y 10.2 se elaboró con ayuda de un asistente de IA (Claude) a partir del capítulo 12 de la guía y del diseño del grupo.
 
 
 
