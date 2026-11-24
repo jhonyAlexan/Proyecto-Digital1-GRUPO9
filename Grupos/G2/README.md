@@ -31,28 +31,25 @@ Los $26$ bloques BSRAM ($58.5\text{ KB}$) disponibles en la Gowin GW1NR-9 quedan
 
 ### 2.1 Acuerdos de Integración entre Subgrupos
 
-Para que todos los módulos del proyecto encajen sin problemas de sincronización ni direcciones cruzadas, se tuvo en cuenta los siguientes puntos:
+Para que todos los módulos del proyecto encajen sin problemas de sincronización ni direcciones cruzadas, se establecieron los siguientes acuerdos:
 
-- **Reloj maestro único ($27\text{ MHz}$):** Todo el SoC dentro de la FPGA corre de forma síncrona con el oscilador base de $27\text{ MHz}$ ($T_{\text{clk}} \approx 37.04\text{ ns}$). Así evitamos cruces de dominios de reloj (CDC) entre el CPU, las memorias y los periféricos.
+- **Reloj maestro único ($27\text{ MHz}$):** Todo el SoC dentro de la FPGA corre de forma síncrona con el oscilador base de $27\text{ MHz}$ ($T_{\text{clk}} \approx 37.04\text{ ns}$), evitando cruces de dominios de reloj (CDC) entre el CPU, las memorias y los periféricos.
 - **Bus estándar del curso:** Todos los periféricos usan la interfaz síncrona acordada (`clk`, `rst`, `cs`, `addr`, `rd`, `wr`, `d_in`, `d_out`).
-- **Alineación con G4 (Pantalla HUB75):** El framebuffer se organiza en **2 bancos de $2048 \times 3$ bits** (RGB de $3$ bits = $8$ colores, $1.5\text{ KB}$ en total) y se sincroniza con la bandera **`FRAME`** del registro `hub75_csr`, descartando el doble búfer de $16\text{ KB}$ que habíamos planteado al inicio.
-- **Alineación con G1, G3 y G5 (Controles y Audio):** Los datos del mando inalámbrico (Joystick analógico + IMU `BMI160` por SPI en la FPGA del mando) llegan por UART $\rightarrow$ Bluetooth (ESP32) hasta el receptor UART de la consola. **El audio se procesa mediante el protocolo I2S hacia un módulo DAC MAX98357A**.
+- **Alineación con G4 (Pantalla HUB75):** El framebuffer se organiza en **2 bancos de $2048 \times 3$ bits** (RGB de $3$ bits = $8$ colores, $1.5\text{ KB}$ en total) y se sincroniza con la bandera **`FRAME`** del registro `hub75_csr`. Este framebuffer ya no es instanciado por G2 en `0x2000_0000`, sino que reside internamente dentro del periférico HUB75 de G4 en la región `0x0044` (dirección `0x0044_4000`).
+- **Alineación con G1, G3 y G5 (Controles y Audio):** Los datos del mando inalámbrico (Joystick analógico + IMU `BMI160` por SPI en la FPGA del mando) llegan por UART $\rightarrow$ Bluetooth (ESP32) hasta el receptor UART de la consola, y su estado procesado para los dos jugadores se almacena en la zona reservada de $6$ registros de la RAM de G2 (direcciones `42` a `47`). El audio se procesa mediante el protocolo I2S hacia un módulo DAC `MAX98357A`.
 - **Recursos de juego (G6):** Las memorias guardan activos genéricos para juegos arcade retro simples (*sprites* 2D, mapas, fuentes y puntajes máximos).
 
-  
-  ### 2.2 Mapa de Memoria Unificado del SoC (FemtoRV32)
+### 2.2 Mapa de Memoria Unificado del SoC (FemtoRV32)
 
 Los periféricos se seleccionan mediante los bits superiores de la dirección (`mem_addr[31:16]`), permitiendo un mapeo limpio del `chip_select`.
 
 | Rango de Direcciones | Tamaño | Subgrupo | Periférico / Región | Descripción de Acceso |
 | :--- | :---: | :---: | :--- | :--- |
-| `0x0000_0000` – `0x0000_7FFF` | $32\text{ KB}$ | **G2 / G6** | `BRAM_PROG_DATA` | Memoria principal de instrucciones y datos del FemtoRV32 (`.text`, `.data`, `.bss`, *stack*). |
-| `0x0040_0000` – `0x0040_0010` | $20\text{ B}$ | **G4** | `HUB75_CSR` | Registros de control y estado del panel LED $64 \times 64$ (incluye bandera `FRAME` para sincronismo). |
-| `0x0041_0000` – `0x0041_000C` | $16\text{ B}$ | **G2** | `SPI_FLASH_CTRL` | Registros MMIO del controlador Flash SPI `W25Q64JV` (`CTRL_STAT`, `CMD_ADDR`, `TX_DATA`, `RX_DATA`). |
+| `0x0000_0000` – `0x0000_7FFF` | $32\text{ KB}$ | **G2 / G6** | `BRAM_PROG_DATA` | Memoria principal de instrucciones y datos del FemtoRV32 (`.text`, `.data`, `.bss`, *stack*) y zona reservada de $6$ registros para los dos controles (direcciones `42`–`47`). |
 | `0x0042_0000` – `0x0042_000C` | $16\text{ B}$ | **G1 / G3** | `UART_INPUT_RX` | Receptor de tramas del mando inalámbrico (ejes del joystick, pulsadores y lecturas del `BMI160`). |
-| `0x0043_0000` – `0x0043_000C` | $16\text{ B}$ | **G5** | `AUDIO_I2S_CTRL` | Registros `FREQ`, `VOL` y `CONTROL` para el generador de audio I2S (MAX98357A). |
-| `0x2000_0000` – `0x2000_3FFF` | $16\text{ KB}$ (espacio) / $1.5\text{ KB}$ (físico) | **G2 / G4** | `FRAMEBUFFER_BRAM` | Escritura lineal de $4,096$ píxeles ($1$ palabra/píxel, `d_in[2:0] = {R,G,B}`) repartidos en dos bancos de $2048 \times 3$ bits. |
-
+| `0x0043_0000` – `0x0043_000C` | $16\text{ B}$ | **G5** | `AUDIO_I2S_CTRL` | Registros `FREQ`, `VOL` y `CONTROL` para el generador de audio I2S (`MAX98357A`). |
+| `0x0044_0000` – `0x0044_4FFF` | $20\text{ B}$ (CSR) + $1.5\text{ KB}$ (FB) | **G4** | `HUB75_CTRL` | Registros de control y estado (`0x0044_0000`, incluye bandera `FRAME`) y framebuffer interno (`0x0044_4000`, $4,096$ píxeles en 2 bancos de $2048 \times 3$ bits). |
+| `0x0045_0000` – `0x0045_000C` | $16\text{ B}$ | **G2** | `SPI_FLASH_CTRL` | Registros MMIO del controlador Flash SPI `W25Q64JV` (`CTRL_STAT`, `CMD_ADDR`, `TX_DATA`, `RX_DATA`). |
 
 ### 2.3 Flujo Completo del Envío de Datos al Juego
 
@@ -62,10 +59,10 @@ En el siguiente diagrama se muestra cómo viajan los datos desde la memoria Flas
 
 | Tarea del Sistema | Dominio | Disparo / Sincronización | Flujo de Entrada $\rightarrow$ Salida |
 | :--- | :---: | :--- | :--- |
-| **Almacenamiento SPI (`Storage`)** | **HW (HDL — G2)** | Escritura en `SPI_CTRL_STAT.start` | Flash `W25Q64` (`MISO`) $\rightarrow$ Registro `SPI_RX_DATA` hacia el CPU. |
-| **Recepción de Controles (`Input`)** | **HW + SW (G1/G3/G5)** | Trama UART recibida | Mando inalámbrico (Joystick + `BMI160`) $\rightarrow$ Registro MMIO `0x1000_0200`. |
-| **Lógica de Juego (`Game Logic`)** | **SW (C — G6)** | Bucle principal + bandera `FRAME` | Estado de controles y *sprites* $\rightarrow$ Actualización de coordenadas, colisiones y escritura de píxeles en `0x2000_0000`. |
-| **Barrido de Video (`Video`)** | **HW (HDL — G4/G2)** | Continuo a $27\text{ MHz}$ ($T_{\text{fila}} = 46.12~\mu\text{s}$) | Lectura síncrona Puerto B de BSRAM ($2048 \times 3$) $\rightarrow$ $14$ líneas paralelas HUB75 ($\approx 678\text{ Hz}$). |
+| **Almacenamiento SPI (`Storage`)** | **HW (HDL — G2)** | Escritura en `SPI_CTRL_STAT.start` (`0x0045_0000`) | Flash `W25Q64JV` (`MISO`) $\rightarrow$ Registro `SPI_RX_DATA` hacia el CPU. |
+| **Recepción de Controles (`Input`)** | **HW + SW (G1/G3/G2)** | Trama UART recibida | Mando inalámbrico (Joystick + `BMI160`) $\rightarrow$ `UART_INPUT_RX` (`0x0042_0000`) $\rightarrow$ Registros de control en RAM (`42`–`47`). |
+| **Lógica de Juego (`Game Logic`)** | **SW (C — G6)** | Bucle principal + bandera `FRAME` | Estado de controles y *sprites* $\rightarrow$ Actualización de coordenadas, colisiones y escritura de píxeles en `0x0044_4000`. |
+| **Barrido de Video (`Video`)** | **HW (HDL — G4)** | Continuo a $27\text{ MHz}$ ($T_{\text{fila}} = 46.12~\mu\text{s}$) | Lectura síncrona Puerto B de BSRAM interna de G4 ($2048 \times 3$) $\rightarrow$ $14$ líneas paralelas HUB75 ($\approx 678\text{ Hz}$). |
 
 ---
 
