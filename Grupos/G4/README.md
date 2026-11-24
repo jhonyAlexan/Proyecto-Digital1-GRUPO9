@@ -365,6 +365,8 @@ Escribir píxeles durante el barrido: la escritura usa un puerto de la memoria y
 
 #### 10.3 Adaptador al bus de FemtoRV
 
+![Adaptador MMIO](img/adaptador_g4.png)
+
 Figura 13: Adaptador entre FemtoRV32 Quark y el core. `chip_select` elige la región con `mem_addr[31:16]`; dentro del periférico, el decodificador local elige el registro con `addr[15:0]`. Las marcas indican el ancho en bits.
 
 El adaptador está en `rtl/peripheral_hub75.v` y sigue el patrón del periférico UART8N1 de la guía (capítulo 12). Tiene tres partes:
@@ -390,6 +392,7 @@ Conexión en `SOC.v` de la guía: en `chip_select` la región `CHIP4ADDR = 0x004
         .hub75_rgb0(HUB75_RGB0), .hub75_rgb1(HUB75_RGB1), .hub75_row(HUB75_ROW),
         .hub75_clk(HUB75_CLK), .hub75_lat(HUB75_LAT), .hub75_oe(HUB75_OE)
     );
+    
 #### 10.4 Tiempos del handshake entre el bus y el core
 
 ![Tiempos del handshake](fig14a-b.png)
