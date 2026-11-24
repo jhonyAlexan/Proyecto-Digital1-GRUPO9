@@ -1,9 +1,10 @@
-tb = """`timescale 1ns / 1ps
+`timescale 1ns / 1ps
+
 module tb_imu;
     reg clk = 0;
     reg rst_n = 0;
     reg start = 0;
-    reg [15:0] tx_data = 16'\''h8000;
+    reg [15:0] tx_data = 16'h8000;
     wire [7:0] rx_data;
     wire done;
     wire sclk, mosi, cs_n;
@@ -18,7 +19,7 @@ module tb_imu;
 
     always #18.5 clk = ~clk;
 
-    reg [7:0] resp_sensor = 8'\''hD1;
+    reg [7:0] resp_sensor = 8'hD1;
     integer i;
 
     initial begin
@@ -38,9 +39,10 @@ module tb_imu;
         end
 
         #1000;
+        if (rx_data === 8'hD1)
+            $display("PASS: rx_data = 0x%02h (esperado 0xD1)", rx_data);
+        else
+            $display("FAIL: rx_data = 0x%02h (esperado 0xD1)", rx_data);
         $finish;
     end
 endmodule
-"""
-open("tb_imu.v", "w").write(tb)
-'
