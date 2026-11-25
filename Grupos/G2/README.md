@@ -280,17 +280,17 @@ module framebuffer_dual_port (
 endmodule
 
 
-
+----
 
 ## 5. Protocolos
 
 ### 5.1 Lista de Protocolos Técnicos
 
-1. **SPI Maestro Modo 0 ($\text{CPOL} = 0$, $\text{CPHA} = 0$):** Temporización de muestreo/desplazamiento, comandos estándar JEDEC para Flash NOR (`0x03` Read Data, `0x06` Write Enable, `0x02` Page Program, `0x20` Sector Erase $4\text{ KB}$, `0x05` Read Status Register) y lectura continua en ráfaga manteniendo `CS#` en bajo.
-2. **Bus Periférico Síncrono MMIO:** Decodificación de direcciones de $32$ bits, pulsos de disparo de un ciclo (`W1P`) y sincronización por consulta de estado (`polling` de `busy` y `done`).
-3. **Inferencia de Memoria BSRAM Dual-Port (`SDPB`):** Reglas de descripción síncrona en Verilog para síntesis abierta en Yosys sobre la familia Gowin GW1N.
+1. **SPI Maestro Modo 0 ($\text{CPOL} = 0$, $\text{CPHA} = 0$):** Muestreo de datos en flanco de subida y desplazamiento en flanco de bajada de `SCLK`; comandos estándar JEDEC para Flash NOR (`0x03` *Read Data*, `0x06` *Write Enable*, `0x02` *Page Program*, `0x20` *Sector Erase* de $4\text{ KB}$, `0x05` *Read Status Register-1* para consulta del bit `BUSY`) y lectura continua en ráfaga manteniendo `CS#` en bajo.
+2. **Bus Periférico Síncrono MMIO:** Decodificación de direcciones de $32$ bits, pulsos de disparo de un ciclo (`W1P`) y sincronización por consulta de estado (*polling* de `busy` y `done`).
+3. **Inferencia de Memoria BSRAM Dual-Port (`SDPB`):** Reglas de descripción síncrona en Verilog (`(* ram_style = "block" *)`) para síntesis abierta en Yosys sobre la familia Gowin GW1N.
 
 ### 5.2 Preguntas Guía
 
-- **¿Qué pasa al encender y cómo se cargan los activos del juego?** Al liberar el reset síncrono (`rst`), el FemtoRV32 empieza a ejecutar el programa principal desde `BRAM_PROG_DATA` (`0x0000_0000`), configura los registros de video (`hub75_csr`) y lee los *sprites* o mapas guardados en direcciones fijas de la Flash SPI `W25Q64JV` a través del controlador MMIO (`0x1000_0100`).
-- **¿Cómo persisten los *High-Scores* sin sistema de archivos?** Se aparta un sector de $4\text{ KB}$ en la zona alta de la Flash `W25Q64JV` (por ejemplo, en `0x7F_0000`). Cuando se bate un récord, el programa en C envía la secuencia `0x06` (*Write Enable*) $\rightarrow$ `0x20` (*Sector Erase*) $\rightarrow$ `0x06` $\rightarrow$ `0x02` (*Page Program*) para grabar los puntajes en binario directo dentro de la memoria no volátil.
+- **¿Qué pasa al encender y cómo se cargan los activos del juego?** Al liberar el reset síncrono (`rst`), el FemtoRV32 comienza a ejecutar el programa principal desde `BRAM_PROG_DATA` (`0x0000_0000`), configura los registros de video (`hub75_csr`) y lee los *sprites* o mapas almacenados en direcciones fijas de la Flash SPI `W25Q64JV` a través del controlador MMIO (`0x1000_0100`).
+- **¿Cómo persisten los *High-Scores* sin sistema de archivos?** Se reserva un sector de $4\text{ KB}$ en la zona alta de la Flash `W25Q64JV` (por ejemplo, en `0x7F_0000`). Cuando se bate un récord, el programa en C ejecuta la secuencia `0x06` (*Write Enable*) → `0x20` (*Sector Erase*) → *polling* con `0x05` hasta `BUSY = 0` → `0x06` (*Write Enable*) → `0x02` (*Page Program*) → *polling* con `0x05` hasta `BUSY = 0`, grabando los puntajes en binario directo dentro de la memoria no volátil.
