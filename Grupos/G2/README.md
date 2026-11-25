@@ -183,7 +183,11 @@ En el diagrama de flujo comportamental se clasifica cada operación según el bl
 
 Con base en la separación FSMD, definimos una **Máquina de Estados Finitos (FSM)** de $5$ estados codificados en $3$ bits (`state[2:0]`) y su **Carta ASMD** con las transferencias entre registros (RT) en cada flanco de subida de `clk`. Cada fila incluye un identificador (`T0`–`T11`) para trazar directamente los casos de prueba del *testbench*:
 
-![Carta ASMD y FSM del Controlador Flash SPI](img/asmd_fsm_spi_g2.png)
+#### Diagrama de Estados (FSM)
+![Diagrama de Estados (FSM) del Controlador Flash SPI](img/fsm_spi_g2.drawio.svg)
+
+#### Carta ASMD (Camino de Datos y Transferencias RT)
+![Carta ASMD del Controlador Flash SPI](img/asmd_spi_g2.png.drawio.svg)
 
 #### Tabla de Estados y Transferencias RT (`spi_fsm_control` + `spi_datapath`)
 
