@@ -27,6 +27,24 @@ En clase de laboratorio se probaron de nuevo los diferentes còdigos, se revisò
 | `tangnano9k.cst` | Asignación de pines FPGA |
 | `Makefile` | Compilación y programación |
 
+
+## Conexiones fìsicas:
+
+| Pin Módulo BMI160 | Pin Tang Nano 9K | Señal | Descripción |
+| :--- | :--- | :--- | :--- |
+| **VCC / VIN** | `3V3` | Alimentación | Usar estrictamente 3.3V |
+| **GND** | `GND` | Tierra | Tierra común del sistema |
+| **SCL / SCK** | `Pin 25` | `sclk` | Reloj SPI (~964 kHz) |
+| **SDA / SDI** | `Pin 26` | `mosi` | Datos de FPGA hacia IMU |
+| **SDO / SAO** | `Pin 27` | `miso` | Datos de IMU hacia FPGA |
+| **CS / CSB** | `Pin 28` | `cs_n` | Chip Select (activo en bajo) |
+
+### Salidas de control 
+* **Pin 29 (`golpe_out`):** Salida digital de 3.3V. Se mantiene en `1` durante **150 ms** cuando detecta un golpe y vuelve a `0`.
+* **Pin 17 (`uart_tx`):** Salida serial a **115200 baudios** (conectada al USB-UART de la placa).
+* **LEDs integrados:** Se encienden todos simultáneamente como indicador visual cada vez que `golpe_out = 1`.
+
+
 ## Verificación 
 
 ```bash
