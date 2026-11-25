@@ -30,7 +30,6 @@ máquina de estados.
 
 ### Caja negra
 ![Caja negra del módulo top](img/caja_negra_top.png)
-<img width="2380" height="1288" alt="image" src="https://github.com/user-attachments/assets/e2e514df-6b18-4eaa-8728-f8cd60101cc9" />
 
 | Señal | Dirección | Ancho | Pin | Descripción |
 | :--- | :--- | :---: | :---: | :--- |
@@ -53,9 +52,48 @@ máquina de estados.
 
 ## spi_master.v
 ### Descripción
-Qué hace el módulo, en 2 o 3 líneas.
+`spi_master.v` es el controlador físico del protocolo SPI en modo 0 (CPOL=0,
+CPHA=0). Se encarga de comunicarse con la IMU BMI160 enviando y recibiendo una
+trama de 16 bits por cada transacción:
+
+- **Primer byte (bits 15 a 8):** comando. El bit 15 indica lectura (1) o
+  escritura (0) y los otros 7 bits son la dirección del registro.
+- **Segundo byte (bits 7 a 0):** en una escritura es el dato a escribir; en una
+  lectura es un relleno (`00`) mientras la IMU responde por `miso`.
+
+Funcionamiento:
+
+1. En reposo mantiene `cs_n = 1` y `sclk = 0`.
+2. Al recibir un pulso en `start`, baja `cs_n`, carga `tx_data` y coloca en
+   `mosi` el bit más significativo.
+3. Un divisor de reloj genera un tick cada 14 ciclos de `clk`, y en cada tick
+   `sclk` cambia de nivel. Esto da un reloj SPI de 27 MHz / 28 ≈ 964 kHz.
+4. En cada flanco de subida de `sclk` captura `miso`, pero solo guarda los
+   últimos 8 bits, que corresponden a la respuesta de la IMU, en `rx_data`
+   (primero el bit más significativo).
+5. En cada flanco de bajada de `sclk` desplaza el siguiente bit hacia `mosi`.
+6. Al terminar los 16 bits sube `cs_n` y genera un pulso de un ciclo en `done`.
+   En ese momento `rx_data` tiene el byte recibido.
+
+Una transacción completa dura 16 × 28 = 448 ciclos de reloj, unos 16,6 µs.
 
 ### Caja negra
+![Caja negra del módulo spi_master](img/caja_negra_spi.png)
+
+| Señal | Dirección | Ancho | Descripción |
+| :--- | :--- | :---: | :--- |
+| `clk` | Entrada | 1 | Reloj del sistema, 27 MHz |
+| `rst_n` | Entrada | 1 | Reset asíncrono, activo en bajo |
+| `start` | Entrada | 1 | Pulso que inicia una transacción |
+| `tx_data` | Entrada | 16 | Trama a enviar: comando (8 bits) + dato (8 bits) |
+| `miso` | Entrada | 1 | Datos de la IMU hacia la FPGA (pin 27) |
+| `sclk` | Salida | 1 | Reloj SPI, ~964 kHz (pin 25) |
+| `mosi` | Salida | 1 | Datos de la FPGA hacia la IMU (pin 26) |
+| `cs_n` | Salida | 1 | Chip select, activo en bajo (pin 28) |
+| `rx_data` | Salida | 8 | Byte recibido de la IMU, válido cuando `done = 1` |
+| `done` | Salida | 1 | Pulso de un ciclo al terminar la transacción |
+
+Los números de pin se asignan en `top.v` y en el archivo `tangnano9k.cst`.
 
 ### Diagrama de flujo / FSM
 
