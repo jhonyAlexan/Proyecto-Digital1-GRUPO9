@@ -29,6 +29,7 @@ El módulo instancia tres bloques: `spi_master` (comunicación con la IMU),
 máquina de estados.
 
 ### Caja negra
+![Caja negra del módulo top](img/caja_negra_top.png)
 <img width="2380" height="1288" alt="image" src="https://github.com/user-attachments/assets/e2e514df-6b18-4eaa-8728-f8cd60101cc9" />
 
 | Señal | Dirección | Ancho | Pin | Descripción |
