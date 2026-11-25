@@ -223,23 +223,24 @@ Con base en la separación FSMD, definimos una **Máquina de Estados Finitos (FS
   - `byte_cnt >= 3` $\rightarrow$ `tx_reg` (en lectura `0x03` envía `8'h00` como byte de relleno).
 
 ---
-
 ## 4. Inferencia y Manejo de BRAM Dual-Port
 
-Como el FemtoRV32 escribe píxeles mientras el controlador de video (G4) barre continuamente el panel LED $64 \times 64$ en modo $1/32$ *scan*, necesitamos acceso simultáneo sin colisiones. Para esto instanciamos **dos bancos independientes de BSRAM *Simple Dual-Port*** de $2048 \times 3$ bits ($1.5\text{ KB}$ en total):
+Como el FemtoRV32 escribe píxeles mientras el controlador de video (G4) barre continuamente el panel LED $64 \times 64$ en modo $1/32$ *scan*, se requiere acceso simultáneo de escritura y lectura sin colisiones. Para ello se instancian **dos bancos independientes de BSRAM *Simple Dual-Port*** (`SDPB`) de $2048 \times 3$ bits ($1.5\text{ KB}$ útiles en total, mapeados en 2 bloques BSRAM físicos).
 
-![Arquitectura de BRAM Dual-Port Alineada con G4](img/bram_dual_port_g2.png)
+![Arquitectura de BRAM Dual-Port Alineada con G4](img/bram_dual_port_g2.drawio.svg)
 
 ### 4.1 Partición Física de Bancos (`0x2000_0000` – `0x2000_3FFF`)
 
+El espacio MMIO asignado abarca $16\text{ KB}$ ($4096$ palabras de 32 bits, 1 píxel por palabra alineada), usando `addr_a[13:2]` como índice lineal de píxel y almacenando únicamente los 3 bits de color `{R, G, B}`.
+
 | Rango MMIO | Banco Físico BSRAM | Filas del Panel $64 \times 64$ | Geometría | Puerto A (Escritura CPU) | Puerto B (Lectura HUB75 G4) |
 | :--- | :---: | :---: | :---: | :--- | :--- |
-| `0x2000_0000` – `0x2000_1FFF` | `fb_upper_ram` | Filas `0` a `31` (Superior) | $2048 \times 3$ bits ($768\text{ B}$) | `we_upper = cs_fb & wr & ~addr[13]`<br>`wr_addr = addr[12:2]`, `din = d_in[2:0]` | `rd_addr = {row_idx[4:0], col_idx[5:0]}`<br>Salida `rgb1_out[2:0]` $\rightarrow$ `{R1, G1, B1}` |
-| `0x2000_2000` – `0x2000_3FFF` | `fb_lower_ram` | Filas `32` a `63` (Inferior) | $2048 \times 3$ bits ($768\text{ B}$) | `we_lower = cs_fb & wr & addr[13]`<br>`wr_addr = addr[12:2]`, `din = d_in[2:0]` | `rd_addr = {row_idx[4:0], col_idx[5:0]}`<br>Salida `rgb2_out[2:0]` $\rightarrow$ `{R2, G2, B2}` |
+| `0x2000_0000` – `0x2000_1FFF` | `fb_upper_ram` | Filas `0` a `31` (Superior) | $2048 \times 3$ bits ($768\text{ B}$) | `we_upper = cs_fb & wr & ~addr_a[13]`<br>`wr_addr = addr_a[12:2]`, `din = din_a[2:0]` | `rd_addr_b = {row_idx[4:0], col_idx[5:0]}`<br>Salida `rgb1_out[2:0]` → `{R1, G1, B1}` |
+| `0x2000_2000` – `0x2000_3FFF` | `fb_lower_ram` | Filas `32` a `63` (Inferior) | $2048 \times 3$ bits ($768\text{ B}$) | `we_lower = cs_fb & wr & addr_a[13]`<br>`wr_addr = addr_a[12:2]`, `din = din_a[2:0]` | `rd_addr_b = {row_idx[4:0], col_idx[5:0]}`<br>Salida `rgb2_out[2:0]` → `{R2, G2, B2}` |
 
 ### 4.2 Plantilla de Inferencia Síncrona en Verilog (Yosys / Gowin `SDPB`)
 
-Este módulo sigue el patrón síncrono estándar que reconoce **Yosys** para inferir bloques **BSRAM** físicos en Gowin sin usar primitivas propietarias ni gastar LUTs:
+Este módulo sigue el patrón síncrono estándar que reconoce **Yosys** para inferir bloques **BSRAM** físicos en Gowin sin instanciar primitivas propietarias ni consumir LUTs:
 
 ```verilog
 module framebuffer_dual_port (
@@ -255,9 +256,9 @@ module framebuffer_dual_port (
     output reg  [2:0]  rgb2_out    // Píxel mitad inferior -> {R2, G2, B2}
 );
 
-    // Dos bloques BSRAM independientes de 2048 x 3 bits (1.5 KB totales)
-    reg [2:0] fb_upper_ram [0:2047];
-    reg [2:0] fb_lower_ram [0:2047];
+    // Dos bloques BSRAM independientes de 2048 x 3 bits (1.5 KB útiles)
+    (* ram_style = "block" *) reg [2:0] fb_upper_ram [0:2047];
+    (* ram_style = "block" *) reg [2:0] fb_lower_ram [0:2047];
 
     wire we_upper = cs_fb & wr & ~addr_a[13];
     wire we_lower = cs_fb & wr &  addr_a[13];
@@ -277,14 +278,9 @@ module framebuffer_dual_port (
     end
 
 endmodule
-```
 
-### 4.3 Coherencia Temporal con el Controlador HUB75 (G4)
 
-- **Cumplimiento de latencia (`CLK_DIV` $\ge 2$):** Al registrar `rgb1_out` y `rgb2_out` en el flanco de subida de `clk` ($27\text{ MHz}$), el dato queda estable exactamente $1$ ciclo ($37.04\text{ ns}$) después de poner `rd_addr_b`, cumpliendo la restricción de G4 (`CLK_DIV` $\ge 2$) para que `HUB75_CLK` siempre capture píxeles válidos.
-- **Prevención de *tearing* con la bandera `FRAME`:** Como el barrido de las $32$ filas tarda $T_{\text{frame}} = 32 \times 46.12~\mu\text{s} \approx 1.48\text{ ms}$ ($\approx 678\text{ Hz}$), el software revisa el bit `FRAME` de `hub75_csr` antes de dibujar el siguiente cuadro, evitando parpadeos o cortes sin duplicar la memoria de video.
 
----
 
 ## 5. Protocolos
 
