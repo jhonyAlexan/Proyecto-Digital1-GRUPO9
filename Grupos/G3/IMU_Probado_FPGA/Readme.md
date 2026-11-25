@@ -103,9 +103,53 @@ Los números de pin se asignan en `top.v` y en el archivo `tangnano9k.cst`.
 
 ## detector_golpe.v
 ### Descripción
-Qué hace el módulo, en 2 o 3 líneas.
+`detector_golpe.v` decide si hubo un golpe o giro brusco a partir de las
+muestras del giroscopio y del acelerómetro. No le importa la dirección del
+movimiento, solo su intensidad.
+
+**Cálculo de la energía del movimiento**
+Cada vez que llega una muestra nueva (`sample_valid = 1`) calcula:
+
+    energia = |gx| + |gy| + |gz| + |ax - ax_prev| + |ay - ay_prev| + |az - az_prev|
+
+- Del giroscopio usa el valor absoluto de cada eje, porque la velocidad angular
+  ya es cero en reposo.
+- Del acelerómetro usa el valor absoluto del cambio respecto a la muestra
+  anterior. Así la aceleración constante (como la gravedad) se cancela y solo
+  se mide la variación.
+- El resultado sale por `energia_out` (19 bits), que `top.v` usa para reportar
+  la energía máxima por UART.
+
+**Máquina de estados**
+| Estado | Salida `golpe_out` | Qué hace |
+| :--- | :---: | :--- |
+| `ST_LISTO` | 0 | Espera una muestra válida con `energia > UMBRAL_GOLPE`. Al detectarla, sube `golpe_out` y pasa a `ST_PULSO`. |
+| `ST_PULSO` | 1 | Mantiene `golpe_out` en alto durante `PULSO_ALTO_CLK` ciclos (150 ms) y pasa a `ST_COOLDOWN`. |
+| `ST_COOLDOWN` | 0 | Ignora nuevas detecciones durante `COOLDOWN_CLK` ciclos (100 ms) y vuelve a `ST_LISTO`. |
+
+El pulso largo y el tiempo de enfriamiento actúan como filtro anti-rebote: un
+solo golpe físico genera un único pulso, aunque la energía se mantenga alta
+varias muestras seguidas.
 
 ### Caja negra
+![Caja negra del módulo detector_golpe](img/caja_negra_detector.png)
+
+| Señal | Dirección | Ancho | Descripción |
+| :--- | :--- | :---: | :--- |
+| `clk` | Entrada | 1 | Reloj del sistema, 27 MHz |
+| `rst_n` | Entrada | 1 | Reset asíncrono, activo en bajo |
+| `sample_valid` | Entrada | 1 | Pulso que indica que hay una muestra nueva de los 6 ejes |
+| `gx`, `gy`, `gz` | Entrada | 16 c/u | Velocidad angular en cada eje, con signo (complemento a 2) |
+| `ax`, `ay`, `az` | Entrada | 16 c/u | Aceleración en cada eje, con signo (complemento a 2) |
+| `golpe_out` | Salida | 1 | 1 mientras hay un golpe detectado, 0 en reposo |
+| `energia_out` | Salida | 19 | Energía del movimiento de la muestra actual |
+
+### Parámetros
+| Parámetro | Valor | Equivale a | Función |
+| :--- | :---: | :---: | :--- |
+| `UMBRAL_GOLPE` | 65000 | - | Energía mínima para considerar un golpe. Subirlo exige golpes más fuertes. |
+| `PULSO_ALTO_CLK` | 4 050 000 | 150 ms | Duración de `golpe_out` en alto |
+| `COOLDOWN_CLK` | 2 700 000 | 100 ms | Tiempo en que se ignoran nuevas detecciones |
 
 ### Diagrama de flujo / FSM
 
@@ -115,9 +159,55 @@ Qué hace el módulo, en 2 o 3 líneas.
 
 ## periferico_imu_mmio.v
 ### Descripción
-Qué hace el módulo, en 2 o 3 líneas.
+`periferico_imu_mmio.v` es la interfaz que permite conectar el sistema de
+detección de golpes al procesador RISC-V (FemtoRV) mediante Memory-Mapped I/O
+(MMIO). Desde el punto de vista del procesador, el detector pasa a ser un
+registro que se lee con una instrucción de carga, como cualquier otro periférico
+del SoC.
+
+Funcionamiento:
+
+1. Instancia internamente el módulo `top` (que a su vez contiene `spi_master`,
+   `detector_golpe` y `uart_tx`). Le pasa `clk` y `resetn`, y saca hacia afuera
+   los pines SPI (`sclk`, `mosi`, `miso`, `cs_n`) y los LEDs.
+2. La señal `golpe_out` de `top` se expone como `golpe_pin`, para tener la
+   salida digital directa en un pin físico.
+3. El procesador lee el estado del golpe con un acceso de lectura al periférico.
+   La lectura es síncrona y registrada: cuando `cs = 1` y `rd = 1`, en el
+   siguiente flanco de `clk` se actualiza `rdata`.
+
+**Mapa de registros**
+| Offset (`addr`) | Acceso | Contenido de `rdata` |
+| :---: | :---: | :--- |
+| `4'h0` | Lectura | Bit 0 = `golpe_detectado` (1 = golpe activo, 0 = reposo). Bits 31 a 1 en 0. |
+| Otros | Lectura | `32'd0` |
+
+El módulo no tiene registros de escritura. Mientras no haya una lectura,
+`rdata` conserva el último valor leído.
+
+**Conexión con el bus**
+- `cs` es el selector de la región de memoria del periférico. Se genera en el
+  decodificador de direcciones del SoC (por ejemplo, `mem_addr[31:16] == 16'h0044`).
+- `addr` es el desplazamiento dentro de la región, tomado de `mem_addr[5:2]`.
+- `rd` es el pulso de lectura del procesador.
 
 ### Caja negra
+![Caja negra del módulo periferico_imu_mmio](img/caja_negra_periferico.png)
+
+| Señal | Dirección | Ancho | Descripción |
+| :--- | :--- | :---: | :--- |
+| `clk` | Entrada | 1 | Reloj del sistema, 27 MHz |
+| `resetn` | Entrada | 1 | Reset asíncrono, activo en bajo |
+| `cs` | Entrada | 1 | Selección de la región del periférico en el bus |
+| `addr` | Entrada | 4 | Desplazamiento local del registro (`mem_addr[5:2]`) |
+| `rd` | Entrada | 1 | Pulso de lectura del procesador |
+| `miso` | Entrada | 1 | Datos de la IMU hacia la FPGA |
+| `rdata` | Salida | 32 | Dato leído por el procesador (bit 0 = golpe) |
+| `sclk` | Salida | 1 | Reloj SPI hacia la IMU |
+| `mosi` | Salida | 1 | Datos de la FPGA hacia la IMU |
+| `cs_n` | Salida | 1 | Chip select de la IMU, activo en bajo |
+| `golpe_pin` | Salida | 1 | Salida digital directa del golpe detectado |
+| `leds[5:0]` | Salida | 6 | LEDs de la placa, activos en bajo |
 
 ### Diagrama de flujo / FSM
 
