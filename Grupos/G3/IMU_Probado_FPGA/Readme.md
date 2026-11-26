@@ -45,7 +45,7 @@ máquina de estados.
 
 
 ### Diagrama de flujo / FSM
-![Diagrama de flujo Módulo SPI](img/caja_negra_top.png)
+![Diagrama de flujo Módulo SPI](img/diagrama_flujo_spi.png)
 
 ### Datapath
 
