@@ -8,10 +8,7 @@
 // Reloj de la placa: 50 MHz (pin E2). Con CLK_DIV = 2: tick de 40 ns, CLK del
 // panel de 12,5 MHz y refresco de ~678 Hz.
 // Pines: board/tangprimer25k_hub75.cst
-//
-// Uso de IA: elaborado con ayuda de un asistente de IA (Claude) a partir de los
-// diagramas y la tabla de transferencias del README de G4; revisado y probado por el grupo.
-// =============================================================================
+
 module top_hub75_tangprimer25k (
     input  wire clk,          // 50 MHz
     input  wire resetn,       // botón, activo en bajo
