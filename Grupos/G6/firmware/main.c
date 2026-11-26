@@ -16,14 +16,15 @@ int main(void) {
   while (1) {
     uint32_t inicio = ciclos();
 
-    leer_uart();
+    leer_mandos();
     int son = actualizar_juego(&juego, boton_inicio());
     sonido(son);
     dibujar(&juego);
     enviar_pantalla(pantalla);
 
-    // esperar a que se completen los 33 ms
-    while (ciclos() - inicio < CICLOS_POR_CUADRO) leer_uart();
+    // esperar a que se cumpla 1/60 s (16,7 ms) desde el inicio del cuadro
+    while (ciclos() - inicio < CICLOS_POR_CUADRO) {
+    }
   }
   return 0;
 }

@@ -1,4 +1,4 @@
-// controles.c - arma los paquetes que llegan por la UART
+// controles.c - estado de los dos mandos
 #include "controles.h"
 
 control_t control[2];
@@ -12,10 +12,27 @@ void iniciar_controles(void) {
     control[j].y = 0;
     control[j].boton = 0;
     control[j].ataque = 0;
+    control[j].secuencia = -1;
     control[j].sin_datos = 100;
   }
 }
 
+// Recibe el registro de un jugador. Si la secuencia cambio, llego una trama nueva.
+void actualizar_control(int j, uint32_t dato) {
+  control_t *c = j ? &control[1] : &control[0];
+  c->x = (int8_t)(dato & 0xFF);
+  c->y = (int8_t)((dato >> 8) & 0xFF);
+  c->boton = (dato >> 16) & 1;
+  c->ataque = (dato >> 17) & 1;
+  int sec = (dato >> 24) & 0xFF;
+  if (sec != c->secuencia) {
+    c->secuencia = sec;
+    c->sin_datos = 0;
+  }
+}
+
+// Lo mismo que hace el periferico del G5, pero en software: lo usa la beta,
+// que manda las tramas byte por byte.
 void recibir_byte(uint8_t b) {
   if (n == 0 && b != 0xAA) return;  // esperar el inicio
   paquete[n] = b;
@@ -32,11 +49,9 @@ void recibir_byte(uint8_t b) {
   else if (paquete[1] == 2) j = 1;
   else return;
 
-  control[j].x = paquete[3];
-  control[j].y = paquete[4];
-  control[j].boton = paquete[5] & 1;
-  control[j].ataque = paquete[6] & 1;
-  control[j].sin_datos = 0;
+  uint32_t dato = paquete[3] | ((uint32_t)paquete[4] << 8) | ((uint32_t)(paquete[5] & 1) << 16) |
+                  ((uint32_t)(paquete[6] & 1) << 17) | ((uint32_t)paquete[2] << 24);
+  actualizar_control(j, dato);
 }
 
 void contar_cuadro(void) {
@@ -44,5 +59,5 @@ void contar_cuadro(void) {
     if (control[j].sin_datos < 100) control[j].sin_datos++;
 }
 
-// conectado si mando algo en el ultimo segundo (60 cuadros)
+// conectado si llego una trama en el ultimo segundo (60 cuadros)
 int conectado(int j) { return control[j].sin_datos < 60; }
