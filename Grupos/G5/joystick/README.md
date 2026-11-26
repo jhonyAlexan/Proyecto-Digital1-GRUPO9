@@ -318,24 +318,23 @@ Falta implementar el banco de registros y su interfaz de lectura.
 
 #### 3.2.6 Pines y niveles eléctricos
 
-La conexión entre la ESP32 y la FPGA requiere una línea de transmisión UART y una referencia de tierra común.
+En el montaje probado, la ESP32 alimenta el joystick a 3,3 V. El eje X (VRx) se conecta al GPIO34, el eje Y (VRy) al GPIO35 y el botón (SW) al GPIO13. Al presionar el botón, la ESP32 lee un 0.
 
-| Señal | Conexión propuesta | Nivel eléctrico |
-|---|---|---|
-| `VRx` | Joystick → ESP32 GPIO34 | Analógica, dependiente de la posición |
-| `VRy` | Joystick → ESP32 GPIO35 | Analógica, dependiente de la posición |
-| `SW` | Joystick → ESP32 GPIO13 | Digital, 0 V o nivel alto de 3,3 V |
-| `VCC` | Alimentación del joystick | 3,3 V propuestos |
-| `GND` | Tierra común del sistema | 0 V |
-| `uart_tx` | ESP32 GPIO17 (propuesta) → FPGA | Salida UART de 3,3 V |
-| `uart_rx` | Tang Nano 9K, pin físico 33 (propuesta) | Entrada UART LVCMOS33 |
-| `clk` | Tang Nano 9K, pin físico 52 | Reloj de 27 MHz |
+La ESP32 y la Tang Nano 9K se comunican por UART:
 
-Para la transmisión UART desde la ESP32 se propone utilizar GPIO17 mediante una interfaz serial de hardware. Esta asignación todavía no se encuentra implementada en el programa inicial y deberá comprobarse según el modelo y la disponibilidad de pines de la placa utilizada.
+- Cable 6: la ESP32 envía el paquete de 8 bytes desde el GPIO17 (TX2) al pin 28 de la Tang Nano.
+- Cable 7: la Tang Nano envía la solicitud `?` desde el pin 29 al GPIO16 (RX2) de la ESP32.
+- Cable 8: conecta el GND de ambas placas para que compartan la misma referencia de tierra.
 
-Para la recepción en la Tang Nano 9K se propone el pin físico 33, configurado como entrada lógica de 3,3 V. Esta conexión deberá verificarse mediante el archivo de restricciones de la placa y pruebas eléctricas.
+La Tang Nano 9K utiliza un reloj de 27 MHz en el pin 52.
 
-La alimentación del joystick a 3,3 V se plantea para mantener sus salidas dentro de los niveles admitidos por la ESP32. Sin embargo, será necesario comprobar el rango efectivo de medición del ADC y ajustar su configuración para obtener lecturas adecuadas.
+**Diagrama del montaje**
+
+![Montaje del joystick con la ESP32 y la Tang Nano 9K](diagramas/montaje_joystick.jpeg)
+
+**Tabla de conexiones y función de los LED**
+
+![Tabla de los ocho cables y función de los seis LED](diagramas/conexiones_joystick.jpeg)
 
 #### 3.2.7 Condiciones de funcionamiento y validación
 
