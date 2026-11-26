@@ -1,4 +1,4 @@
-# Implementación RTL y Verificación — Subgrupo G2 (Memorias y Arquitectura Hardware)
+# Implementación RTL y Verificación - Memorias 
 
 En esta carpeta reunimos el código sintetizable en Verilog, las restricciones físicas de pines y el banco de pruebas autoverificado del subsistema de memorias para la **Sipeed Tang Nano 9K** (FPGA Gowin GW1NR-9, reloj maestro de $27\text{ MHz}$).
 
