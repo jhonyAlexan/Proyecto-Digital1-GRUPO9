@@ -8,7 +8,14 @@
 
 static juego_t juego;
 
-void leer_uart(void) {}
+// clang convierte el borrado de la pantalla en memset; en el navegador no hay libc
+void *memset(void *d, int c, unsigned long n) {
+  unsigned char *p = d;
+  while (n--) *p++ = (unsigned char)c;
+  return d;
+}
+
+void leer_mandos(void) {}
 void enviar_pantalla(uint8_t *p) {}
 void sonido(int efecto) {}
 uint32_t ciclos(void) { return 0; }

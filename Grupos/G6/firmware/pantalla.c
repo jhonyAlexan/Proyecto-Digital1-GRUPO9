@@ -22,7 +22,6 @@ void rect(int x, int y, int w, int h, uint8_t color) {
         pantalla[(j << 6) + i] = color;  // j*64 + i
     }
   }
-  leer_uart();
 }
 
 // letras de 3x5: cada fila son 3 bits
@@ -65,7 +64,6 @@ void texto(int x, int y, const char *s, uint8_t color) {
           pantalla[((y + fila) << 6) + x + col] = color;
     x += 4;
     s++;
-    leer_uart();
   }
 }
 
@@ -93,7 +91,6 @@ static void dano(int x, int y, int v, uint8_t color) {
 static void fondo(void) {
   for (int y = 0; y < 64; y++) {
     for (int x = 0; x < 64; x++) pantalla[(y << 6) + x] = NEGRO;
-    leer_uart();  // la UART no tiene FIFO
   }
   // la isla
   rect(ISLA_X0, ISLA_Y, ISLA_X1 - ISLA_X0, 2, VERDE);
@@ -163,7 +160,6 @@ static void sprite(int x, int y, const char *const *dib, int dir, int blanco) {
         if (k != '.' && px >= 0 && px < 64) pantalla[(py << 6) + px] = blanco ? BLANCO : color_de(k);
       }
     }
-    leer_uart();
   }
 }
 
