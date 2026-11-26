@@ -343,16 +343,30 @@ endmodule
 - **Cumplimiento de latencia (`CLK_DIV` $\ge 2$):** Al registrar `rgb1_out` y `rgb2_out` en el flanco de subida de `clk` ($27\text{ MHz}$), el dato queda estable exactamente $1$ ciclo ($37.04\text{ ns}$) después de presentar la dirección `rd_addr_b`. Esto cumple la restricción de temporización de G4 (`CLK_DIV` $\ge 2$), asegurando que el reloj de desplazamiento del panel (`HUB75_CLK`) siempre capture píxeles estables.
 - **Prevención de cortes visuales (*tearing*) con la bandera `FRAME`:** El barrido completo de las $32$ filas tarda $T_{\text{frame}} = 32 \times 46.12~\mu\text{s} \approx 1.48\text{ ms}$ ($\approx 678\text{ Hz}$). Gracias a esta alta tasa de refresco y a que el software consulta el bit `FRAME` de `hub75_csr` antes de dibujar el siguiente cuadro, evitamos cortes visuales o parpadeos sin tener que gastar otros $2$ bloques BSRAM en un doble búfer (*double buffering*).
 ----
-
 ## 5. Protocolos
 
 ### 5.1 Lista de Protocolos Técnicos
 
-1. **SPI Maestro Modo 0 ($\text{CPOL} = 0$, $\text{CPHA} = 0$):** Muestreo de datos en flanco de subida y desplazamiento en flanco de bajada de `SCLK`; comandos estándar JEDEC para Flash NOR (`0x03` *Read Data*, `0x06` *Write Enable*, `0x02` *Page Program*, `0x20` *Sector Erase* de $4\text{ KB}$, `0x05` *Read Status Register-1* para consulta del bit `BUSY`) y lectura continua en ráfaga manteniendo `CS#` en bajo.
-2. **Bus Periférico Síncrono MMIO:** Decodificación de direcciones de $32$ bits, pulsos de disparo de un ciclo (`W1P`) y sincronización por consulta de estado (*polling* de `busy` y `done`).
-3. **Inferencia de Memoria BSRAM Dual-Port (`SDPB`):** Reglas de descripción síncrona en Verilog (`(* ram_style = "block" *)`) para síntesis abierta en Yosys sobre la familia Gowin GW1N.
+Para integrar el subsistema de memorias con el procesador **FemtoRV32** y los periféricos de los demás subgrupos, definimos e implementamos tres protocolos técnicos fundamentales:
+
+1. **SPI Maestro Modo 0 ($\text{CPOL} = 0$, $\text{CPHA} = 0$):**
+   Elegimos el Modo 0 porque es el estándar nativo de la memoria Flash NOR **Winbond `W25Q64JV`** y mantiene la línea de reloj `SCLK` en bajo (`0`) durante el reposo, lo que reduce el consumo estático y evita flancos falsos al activar `CS#`. En este modo, nuestro controlador muestrea los datos entrantes (`MISO`) en cada flanco de subida de `SCLK` y desplaza los bits salientes (`MOSI`) en cada flanco de bajada. Implementamos los comandos estándar JEDEC necesarios para gestionar activos y puntajes: `0x03` (*Read Data*), `0x06` (*Write Enable*), `0x02` (*Page Program*), `0x20` (*Sector Erase* de $4\text{ KB}$) y `0x05` (*Read Status Register-1*, para vigilar el bit `BUSY`). Además, soportamos lectura continua en ráfaga manteniendo `CS#` en bajo mediante el bit `cs_hold`, aprovechando que la `W25Q64JV` autoincrementa su puntero interno de dirección tras cada byte leído.
+
+2. **Bus Periférico Síncrono MMIO:**
+   Comunicamos el FemtoRV32 con nuestro controlador Flash a través de una interfaz síncrona mapeada en memoria en la región base `0x0045_0000`, gobernada por el reloj único del SoC ($27\text{ MHz}$). Decidimos usar un pulso de disparo de un solo ciclo (`start`) junto con banderas de estado retenidas (`busy` y `done`) para que el programa en C sincronice las transferencias por consulta de estado (*polling*), evitando añadir controladores de interrupciones en hardware que consumirían celdas lógicas adicionales en la FPGA.
+
+3. **Inferencia de Memoria BSRAM de Doble Puerto (`SDPB`):**
+   Aplicamos reglas estrictas de descripción síncrona en Verilog (`(* ram_style = "block" *)`, lectura y escritura registradas en el flanco de subida de `clk` y ausencia de borrado global por `rst`) para que la herramienta abierta **Yosys** infiera bloques físicos **BSRAM** de la familia Gowin GW1N. De este modo evitamos gastar miles de LUTs en memoria distribuida y mantenemos nuestro código independiente de primitivas propietarias del fabricante.
 
 ### 5.2 Preguntas Guía
 
-- **¿Qué pasa al encender y cómo se cargan los activos del juego?** Al liberar el reset síncrono (`rst`), el FemtoRV32 comienza a ejecutar el programa principal desde `BRAM_PROG_DATA` (`0x0000_0000`), configura los registros de video (`hub75_csr`) y lee los *sprites* o mapas almacenados en direcciones fijas de la Flash SPI `W25Q64JV` a través del controlador MMIO (`0x1000_0100`).
-- **¿Cómo persisten los *High-Scores* sin sistema de archivos?** Se reserva un sector de $4\text{ KB}$ en la zona alta de la Flash `W25Q64JV` (por ejemplo, en `0x7F_0000`). Cuando se bate un récord, el programa en C ejecuta la secuencia `0x06` (*Write Enable*) → `0x20` (*Sector Erase*) → *polling* con `0x05` hasta `BUSY = 0` → `0x06` (*Write Enable*) → `0x02` (*Page Program*) → *polling* con `0x05` hasta `BUSY = 0`, grabando los puntajes en binario directo dentro de la memoria no volátil.
+- **¿Qué pasa al encender y cómo se cargan los activos del juego?**
+  Al liberar la señal de reinicio síncrono (`rst`), el FemtoRV32 comienza a ejecutar las instrucciones del firmware directamente desde `BRAM_PROG_DATA` (`0x0000_0000`), donde el programa ya reside cargado tras configurar el *bitstream* de la FPGA. En su rutina de inicialización, el código en C configura los registros de control del panel LED (`hub75_csr` en `0x0044_0000`) y solicita los gráficos 2D (*sprites*), fuentes y mapas de nivel almacenados en direcciones fijas de la Flash externa `W25Q64JV`. Para ello, escribe el comando `0x03` junto con la dirección de $24$ bits en `SPI_CMD_ADDR` (`0x0045_0004`), activa `cs_hold = 1` y lee los bytes en ráfaga desde `SPI_RX_DATA` (`0x0045_000C`) para copiarlos hacia la memoria de video (`0x0044_4000`) o hacia las estructuras de datos del juego en RAM.
+
+- **¿Cómo persisten los *High-Scores* sin sistema de archivos?**
+  Descartamos implementar un sistema de archivos como FAT32 porque su código ocuparía varios kilobytes dentro de nuestros $32\text{ KB}$ de `BRAM_PROG_DATA` sin aportar beneficios reales para guardar apenas unos pocos bytes de puntajes. En su lugar, reservamos un sector dedicado de $4\text{ KB}$ en la zona alta de la Flash `W25Q64JV` (por ejemplo, en `0x7F_0000` – `0x7F_0FFF`), completamente separado de los activos gráficos del juego. Como en una memoria Flash NOR los bits solo pueden programarse pasando de `1` a `0`, antes de escribir un nuevo récord es obligatorio borrar el sector completo para devolver todas sus celdas a `0xFF`. Por ello, cuando se supera un puntaje máximo, nuestro software ejecuta la siguiente secuencia exacta:
+  1. Envía `0x06` (*Write Enable*) para habilitar el *latch* interno de escritura (`WEL = 1`).
+  2. Envía `0x20` (*Sector Erase*) con la dirección `0x7F_0000` para borrar los $4\text{ KB}$.
+  3. Consulta periódicamente el registro de estado con `0x05` (*polling*) hasta verificar que el bit `BUSY` regrese a `0` (indicando que el borrado físico terminó).
+  4. Envía nuevamente `0x06` (*Write Enable*), ya que la memoria desactiva automáticamente la protección de escritura tras completar el borrado.
+  5. Envía `0x02` (*Page Program*) con la dirección `0x7F_0000` y los bytes del puntaje en formato binario directo, seguido de una última consulta con `0x05` hasta que `BUSY = 0`.
