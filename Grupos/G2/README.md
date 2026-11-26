@@ -1,5 +1,19 @@
 # Arquitectura Hardware y Sistema de Memorias
 
+##  Plan de Trabajo y Tareas Pendientes del grupo G2
+
+| Estado | Categoría / Entregable | Descripción de la Tarea Técnica | Asignado a |
+| :---: | :--- | :--- | :--- |
+| - [ ] | **Verificación SVG (ASMD/FSM)** | Revisar que `asmd_fsm_spi_g2.svg` refleje la condición de `len` dinámico y el flag `done` retenido (*latch*). | Sofía Michelle Torres |
+| - [ ] | **Verificación SVG (Tiempos)** | Confirmar que `diagrama_tiempos_spi_g2.svg` mantenga la señal `done` en alto (`1`) tras completar la transferencia. | Sofía Michelle Torres |
+| - [ ] | **Verificación SVG (Flujo/Caja Negra)** | Revisar que `caja_negra_sistema.svg` y `flujo_datos_g2.svg` muestren la base `0x0045` y la interfaz I2S sin componentes obsoletos. | Ramón Santiago Castro C. |
+| - [ ] | **Código RTL (Controlador SPI)** | Escribir `Grupos/G2/rtl/spi_flash_controller.v` en Verilog síncrono bajo FSMD con trama dinámica y `done` retenido. | Juan Sebastián Vásquez |
+| - [ ] | **Código RTL (Adaptador MMIO)** | Crear `Grupos/G2/rtl/peripheral_spi_flash.v` para decodificar el bus de 32 bits en la región `0x0045_0000` - `0x0045_000C`. | Juan Sebastián Vásquez |
+| - [ ] | **Banco de Pruebas (Testbench)** | Diseñar `Grupos/G2/rtl/tb/tb_spi_flash.v` y `Makefile` para simulación autoverificada con Icarus Verilog que valide WREN (`0x06`) y Read (`0x03`). | Juan Sebastián Vásquez |
+| - [ ] | **Restricciones Físicas** | Crear `Grupos/G2/rtl/g2_flash.cst` asignando los pines físicos de la Flash SPI en la tarjeta Sipeed Tang Nano 9K. | Ramón Santiago Castro C. |
+| - [ ] | **Integración de Memoria SoC** | Publicar y acordar la tabla unificada del mapa MMIO en el `README.md` raíz en coordinación con los demás subgrupos. | Sofía Michelle Torres |
+
+
 ---
 
 ## 1. Delimitación y Selección de Tecnologías de Memoria
