@@ -11,6 +11,7 @@ Esto consta de tres modulos
 - Desempaquetador
 
 Estos módulos se conectan asi
+
 <img width="2928" height="624" alt="image" src="https://github.com/user-attachments/assets/3cc26793-8aad-4936-bf65-9fd30d6c5b5c" />
 
 
@@ -18,6 +19,9 @@ Estos módulos se conectan asi
 
 <img width="5524" height="2284" alt="image" src="https://github.com/user-attachments/assets/6b331879-1b03-4858-99a7-b30cecb67fb5" />
 
+Aqui puede ver el datapath del archivo:
+
+<img width="5928" height="2280" alt="image" src="https://github.com/user-attachments/assets/343fd6a3-5fd9-4faf-8021-0900584b6c37" />
 
 
 ## UART
