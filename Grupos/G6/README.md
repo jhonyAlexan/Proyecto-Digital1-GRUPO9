@@ -38,7 +38,7 @@ La consola es la única que decide: los mandos solo miden y envían. El juego ab
 ```mermaid
 flowchart LR
     T[Tramas de J1 y J2<br/>UART] --> F[Firmware del juego<br/>femtoRV32]
-    B[Botón de inicio] --> F
+   
     F --> P[Pantalla 64x64<br/>G4]
     F --> S[Sonido<br/>G5]
 ```
