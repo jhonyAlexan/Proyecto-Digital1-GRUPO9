@@ -111,76 +111,78 @@ Las tareas con tiempos estrictos y repetitivos —como generar el reloj SPI a $3
 
 ## 3. Diseño del Controlador de Memoria Flash SPI (Metodología FSMD)
 
-Siguiendo la metodología de la guía del curso (`uart.pdf`), diseñamos el controlador maestro SPI en Modo 0 (`spi_flash_controller.v`) separando la lógica de control (FSM) del camino de datos (Datapath).
+Para diseñar el controlador maestro SPI en Modo 0 (`spi_flash_controller.v`), apliqué la metodología **FSMD** (*Finite State Machine with Datapath*), dividiendo el hardware en dos partes bien diferenciadas: una **Unidad de Control** (que decide en qué etapa de la transacción nos encontramos) y un **Camino de Datos** (que almacena, desplaza y cuenta los bits y bytes). Elegí esta separación porque evita mezclar contadores y registros de desplazamiento dentro de la máquina de estados; así, si necesito cambiar la longitud de una trama o ajustar la frecuencia del reloj SPI, modifico el camino de datos sin alterar la lógica de estados.
 
 ### 3.1 Diagrama de Caja Negra y Especificación de Interfaz
 
-En lugar de dibujar solo el pinout de la memoria Flash, la caja negra representa el periférico RTL sintetizable dentro de la FPGA, con el bus del procesador a la izquierda y las $4$ señales físicas hacia la `W25Q64JV` a la derecha:
+La caja negra representa mi periférico sintetizable dentro de la FPGA, actuando como puente entre el bus interno del procesador **FemtoRV32** (izquierda) y las $4$ líneas físicas que van hacia la memoria externa **Winbond `W25Q64JV`** (derecha):
 
 ![Diagrama de Caja Negra del Controlador Flash SPI](img/caja_negra_spi_g2.drawio.svg)
 
 #### Características de la Interfaz
 
-- **Rol:** Esclavo en el bus MMIO del FemtoRV32 y maestro SPI frente a la Flash externa `W25Q64JV`.
-- **Protocolo externo:** SPI síncrono **Modo 0** ($\text{CPOL} = 0$, $\text{CPHA} = 0$), envío **MSB-first** (bit más significativo primero) sobre $4$ líneas físicas unidireccionales.
-- **Reloj y reinicio:** Síncrono al reloj maestro del SoC (`clk = 27 MHz`) con reset síncrono activo en alto (`rst`).
-- **Sincronización con CPU:** Banderas `busy` y `done` en el registro de estado para esperar el fin de cada transferencia o encadenar lecturas en ráfaga con `cs_hold`.
+- **Rol en el sistema:** Funciona como esclavo en el bus MMIO del procesador y como maestro SPI frente a la memoria Flash externa.
+- **Protocolo externo:** SPI síncrono **Modo 0** ($\text{CPOL} = 0$, $\text{CPHA} = 0$), transmitiendo siempre el bit más significativo primero sobre $4$ líneas físicas unidireccionales.
+- **Reloj y reinicio:** Todo el módulo opera de forma síncrona con el reloj maestro del SoC (`clk = 27 MHz`) y cuenta con un reinicio síncrono activo en alto (`rst`).
+- **Sincronización con el procesador:** Expone las banderas `busy` y `done` en su registro de estado para que el software sepa cuándo terminó una transferencia o cuándo puede encadenar lecturas continuas usando `cs_hold`.
 
 #### Tabla de Señales de la Caja Negra
 
 | Señal | Dirección | Ancho | Interfaz | Descripción Funcional |
 | :--- | :---: | :---: | :--- | :--- |
-| `clk` | Entrada | $1$ bit | Bus SoC | Reloj maestro del sistema ($27\text{ MHz}$). |
-| `rst` | Entrada | $1$ bit | Bus SoC | Reinicio síncrono activo en alto (`1` lleva la FSM y el datapath a `IDLE`). |
+| `clk` | Entrada | $1$ bit | Bus SoC | Reloj maestro unificado del sistema ($27\text{ MHz}$). |
+| `rst` | Entrada | $1$ bit | Bus SoC | Reinicio síncrono activo en alto (`1` lleva tanto la FSM como el camino de datos a `IDLE`). |
 | `cs` | Entrada | $1$ bit | Bus SoC | Selección de periférico activada por el decodificador MMIO para la región `0x0045_xxxx`. |
-| `addr` | Entrada | $4$ bits | Bus SoC | *Offset* de dirección interna para seleccionar los registros del controlador. |
+| `addr` | Entrada | $4$ bits | Bus SoC | Desplazamiento de dirección interna para seleccionar uno de los $4$ registros del controlador. |
 | `rd` | Entrada | $1$ bit | Bus SoC | Habilitación de lectura desde el procesador FemtoRV32. |
 | `wr` | Entrada | $1$ bit | Bus SoC | Habilitación de escritura desde el procesador FemtoRV32. |
-| `d_in` | Entrada | $32$ bits | Bus SoC | Bus de datos desde el CPU (comandos SPI, dirección de $24$ bits y dato TX). |
-| `d_out` | Salida | $32$ bits | Bus SoC | Bus de datos hacia el CPU (byte leído de Flash y banderas `busy`/`done`). |
-| `spi_cs_n` | Salida | $1$ bit | Flash SPI | Selección de chip hacia la `W25Q64JV` (activo en bajo durante la transacción). |
-| `spi_sclk` | Salida | $1$ bit | Flash SPI | Reloj serie generado internamente para sincronizar bits en `MOSI` y `MISO`. |
-| `spi_mosi` | Salida | $1$ bit | Flash SPI | Salida serie hacia el pin `DI` de la Flash (envía *opcodes*, direcciones y datos). |
-| `spi_miso` | Entrada | $1$ bit | Flash SPI | Entrada serie desde el pin `DO/SO` de la Flash (recibe datos y registro de estado). |
+| `d_in` | Entrada | $32$ bits | Bus SoC | Bus de datos de entrada desde el CPU (código de operación SPI, dirección de $24$ bits y dato a transmitir). |
+| `d_out` | Salida | $32$ bits | Bus SoC | Bus de datos de salida hacia el CPU (último byte leído de la Flash y banderas `busy`/`done`). |
+| `spi_cs_n` | Salida | $1$ bit | Flash SPI | Selección de chip hacia la `W25Q64JV` (activo en bajo durante toda la transacción). |
+| `spi_sclk` | Salida | $1$ bit | Flash SPI | Reloj serie generado internamente para sincronizar los bits en `MOSI` y `MISO`. |
+| `spi_mosi` | Salida | $1$ bit | Flash SPI | Salida serie hacia el pin `DI` de la Flash (envía códigos de operación, direcciones y datos). |
+| `spi_miso` | Entrada | $1$ bit | Flash SPI | Entrada serie desde el pin `DO/SO` de la Flash (recibe datos leídos y el registro de estado). |
 
 ---
 
-### 3.2 Diagrama de Bloques Control / Datapath y Condiciones de Diseño
+### 3.2 Diagrama de Bloques Control / Camino de Datos y Condiciones de Diseño
 
-Dividimos el controlador en cuatro bloques síncronos gobernados por el reloj único `clk` ($27\text{ MHz}$): interfaz de registros MMIO (`spi_mmio_regs`), generador de pulsos de habilitación (`spi_tick_gen`), unidad de control (`spi_fsm_control`) y camino de datos (`spi_datapath`):
+Internamente estructuré el controlador en cuatro bloques síncronos gobernados por el reloj único `clk` ($27\text{ MHz}$): la interfaz de registros MMIO (`spi_mmio_regs`), el generador de pulsos de habilitación (`spi_tick_gen`), la unidad de control (`spi_fsm_control`) y el camino de datos (`spi_datapath`):
 
 ![Diagrama de Bloques Control y Datapath del Controlador SPI](img/bloques_control_datapath_spi_g2.drawio.svg)
 
 #### Mapa de Registros Internos (`spi_mmio_regs` — Base `0x0045_0000`)
 
-| Offset | Nombre | Acceso | Campos de Bits | Descripción Funcional |
+Decidí distribuir la interfaz hacia el software en cuatro registros de $32$ bits para separar el control de los datos y evitar escrituras accidentales mientras hay una transmisión en curso:
+
+| Desplazamiento | Nombre | Acceso | Campos de Bits | Descripción Funcional |
 | :---: | :--- | :---: | :--- | :--- |
-| `0x00` | `SPI_CTRL_STAT` | `R/W` | `[0]` `start` (`W1P`)<br>`[1]` `cs_hold` (`R/W`)<br>`[8]` `busy` (`R`)<br>`[9]` `done` (`R`) | Arranca la transacción (`start`), mantiene `spi_cs_n` en bajo para lecturas en ráfaga (`cs_hold`) y reporta el estado al CPU. |
-| `0x04` | `SPI_CMD_ADDR` | `R/W` | `[31:24]` `cmd[7:0]`<br>`[23:0]` `addr[23:0]` | Código de operación SPI (`0x03` Read, `0x06` WREN, `0x02` Page Program, `0x20` Sector Erase) y dirección física de $24$ bits. |
-| `0x08` | `SPI_TX_DATA` | `R/W` | `[7:0]` `tx_data[7:0]` | Byte de datos a enviar hacia la memoria Flash en operaciones de escritura o configuración. |
-| `0x0C` | `SPI_RX_DATA` | `R` | `[7:0]` `rx_data[7:0]` | Último byte capturado desde `spi_miso` cuando se activa la bandera `done`. |
+| `0x00` | `SPI_CTRL_STAT` | `R/W` | `[0]` `start` (pulso de $1$ ciclo)<br>`[1]` `cs_hold` (`R/W`)<br>`[8]` `busy` (`R`)<br>`[9]` `done` (`R`) | Inicia la transacción (`start`), mantiene `spi_cs_n` en bajo para lecturas continuas (`cs_hold`) y reporta el estado actual al procesador. |
+| `0x04` | `SPI_CMD_ADDR` | `R/W` | `[31:24]` `cmd[7:0]`<br>`[23:0]` `addr[23:0]` | Código de operación SPI (`0x03` lectura, `0x06` habilitar escritura, `0x02` programar página, `0x20` borrar sector) y dirección física de $24$ bits. |
+| `0x08` | `SPI_TX_DATA` | `R/W` | `[7:0]` `tx_data[7:0]` | Byte de datos a enviar hacia la memoria Flash en operaciones de escritura. |
+| `0x0C` | `SPI_RX_DATA` | `R` | `[7:0]` `rx_data[7:0]` | Último byte capturado desde `spi_miso` una vez se activa la bandera `done`. |
 
-#### Condiciones para el Diseño Interno
+#### Condiciones y Justificación del Diseño Interno
 
-1. **Sincronización de entrada asíncrona (`2-FF`):** La señal `spi_miso` pasa por dos flip-flops en cascada (`miso_sync`) muestreados a $27\text{ MHz}$ antes de entrar al registro de desplazamiento, evitando problemas de metaestabilidad.
-2. **Pulso de habilitación (`sclk_tick`):** En lugar de crear un reloj derivado con divisores combinacionales, `spi_tick_gen` genera un **pulso de habilitación de 1 ciclo de `clk`** cada $N = 4$ ciclos del oscilador base. Todo el hardware queda en un solo dominio de reloj.
-3. **Salidas registradas:** Las líneas `spi_cs_n`, `spi_sclk` y `spi_mosi` salen directo de registros síncronos para evitar *glitches* en los pines físicos hacia la memoria.
+1. **Sincronizador de doble flip-flop en `spi_miso` (`2-FF`):** Como `spi_miso` proviene de un chip externo y sufre retardos físicos en las pistas de la tarjeta, no es síncrona con el reloj interno de la FPGA. Por eso la paso por dos flip-flops en cascada (`miso_sync`) muestreados a $27\text{ MHz}$ antes de entrar al registro de desplazamiento, eliminando el riesgo de metaestabilidad.
+2. **Pulso de habilitación (`sclk_tick`) en lugar de un reloj dividido:** En diseño sobre FPGA, dividir un reloj usando lógica combinacional genera sesgos (*skew*) y crea un segundo dominio de reloj difícil de analizar en la síntesis. Para evitarlo, `spi_tick_gen` funciona como un contador que genera un **pulso de habilitación de 1 ciclo de `clk`** cada $N = 4$ ciclos del oscilador base. De esta forma, todos los registros siguen trabajando bajo el mismo flanco de `27 MHz`.
+3. **Salidas físicas registradas:** Las señales `spi_cs_n`, `spi_sclk` y `spi_mosi` salen directamente de registros síncronos (flip-flops) y no de puertas lógicas combinacionales. Esto garantiza que no aparezcan pulsos espurios (*glitches*) en los pines físicos que puedan confundir a la Flash con un flanco de reloj falso.
 
 ---
 
 ### 3.3 Diagrama de Tiempos SPI Modo 0 y Análisis Temporal
 
-En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\text{CPOL} = 0$, $\text{CPHA} = 0$), tomando como ejemplo una transacción estándar de lectura de $5$ bytes ($1$ byte `Cmd` + $3$ bytes `Addr` + $1$ byte `Data`) y la opción de lectura continua manteniendo la línea de selección activa (`cs_hold = 1`):
+En el diagrama de tiempos muestro la evolución bit a bit en **SPI Modo 0** ($\text{CPOL} = 0$, $\text{CPHA} = 0$), tomando como referencia una transacción estándar de lectura de $5$ bytes ($1$ byte `Cmd` + $3$ bytes `Addr` + $1$ byte `Data`) y la extensión en ráfaga manteniendo la selección activa (`cs_hold = 1`):
 
 ![Diagrama de Tiempos SPI Modo 0](img/diagrama_tiempos_spi_g2.drawio.svg)
 
 #### Secuencia Temporal Paso a Paso
 
-1. **Reposo (`IDLE`):** `spi_cs_n = 1` (si `cs_hold = 0`), `spi_sclk = 0`, `busy = 0` y `done = 0` (o retiene el `1` de la transacción anterior).
-2. **Solicitud MMIO:** El CPU carga `SPI_CMD_ADDR` (`0x04`) y escribe `start = 1`. La FSM pone `busy = 1`, **limpia la bandera `done = 0`** y espera el siguiente pulso `sclk_tick`.
-3. **Inicio y establecimiento ($t_0$):** Al llegar `sclk_tick`, `spi_cs_n` baja a `0` y `spi_mosi` coloca de inmediato el bit más significativo `D7`, garantizando un tiempo de establecimiento de $T_{\text{half}}$ antes del primer flanco de subida de `spi_sclk`.
+1. **Reposo (`IDLE`):** `spi_cs_n = 1` (si `cs_hold = 0`), `spi_sclk = 0`, `busy = 0` y `done = 0` (o conserva el `1` de la transacción anterior).
+2. **Solicitud MMIO:** El CPU escribe `SPI_CMD_ADDR` (`0x04`) y activa `start = 1`. La FSM pone `busy = 1`, **limpia la bandera `done = 0`** y espera el siguiente pulso `sclk_tick`.
+3. **Inicio y establecimiento ($t_0$):** Al llegar `sclk_tick`, `spi_cs_n` baja a `0` y `spi_mosi` coloca de inmediato el bit más significativo `D7`, asegurando un tiempo de establecimiento de $T_{\text{half}}$ antes del primer flanco de subida de `spi_sclk`.
 4. **Muestreo y desplazamiento (`D7` $\rightarrow$ `D0`):** En cada **flanco de subida** de `spi_sclk`, el camino de datos captura `miso_sync`; en cada **flanco de bajada**, actualiza `spi_mosi` con el siguiente bit.
-5. **Parada y retención ($t_f$):** Después del último flanco de bajada (`D0`), `spi_cs_n` se mantiene en bajo medio período más ($T_{\text{half}}$). En $t_f$, `spi_cs_n` vuelve a `~cs_hold`, `busy` pasa a `0` y **`done` se establece en `1` (bandera retenida en registro hasta que el CPU envíe un nuevo `start`).**
+5. **Parada y retención ($t_f$):** Tras el último flanco de bajada (`D0`), `spi_cs_n` permanece en bajo medio período adicional ($T_{\text{half}}$) para cumplir el tiempo de retención de la memoria. En $t_f$, `spi_cs_n` regresa a `~cs_hold`, `busy` pasa a `0` y **`done` se fija en `1` (como bandera retenida en registro hasta que el CPU envíe un nuevo `start`).**
 
 #### Cálculos Temporales y Ancho de Banda ($f_{\text{clk}} = 27\text{ MHz}$, $N = 4$)
 
@@ -194,37 +196,38 @@ En el diagrama de tiempos se observa el envío bit a bit en **SPI Modo 0** ($\te
 
   $$T_{\text{SCLK}} = 2 \cdot T_{\text{half}} = 8 \cdot T_{\text{clk}} \approx 296.30\text{ ns} \implies f_{\text{SCLK}} = \frac{27\text{ MHz}}{8} = 3.375\text{ MHz}$$
 
-- **Latencia del sincronizador `2-FF`:** El doble flip-flop agrega un retardo fijo de $2 \cdot T_{\text{clk}} \approx 74.07\text{ ns}$. Como cada semiperíodo dura $148.15\text{ ns}$, `miso_sync` queda estable al menos $74\text{ ns}$ antes de cada flanco de captura.
-
+- **Margen con el sincronizador `2-FF`:** El doble flip-flop introduce un retardo fijo de $2 \cdot T_{\text{clk}} \approx 74.07\text{ ns}$. Como cada semiperíodo dura $148.15\text{ ns}$, la señal `miso_sync` llega estable al menos $74\text{ ns}$ antes de cada flanco de subida de captura.
 - **Tiempos de transferencia hacia el juego:**
   - **Tiempo por byte ($8$ bits):** $T_{\text{byte}} = 8 \cdot T_{\text{SCLK}} \approx 2.37~\mu\text{s}$.
   - **Lectura simple de $1$ byte (`Cmd 0x03 + 24-bit Addr + 1-byte Data = 40 bits`):**
 
     $$T_{\text{lectura 1B}} = 40 \cdot T_{\text{SCLK}} + 2 \cdot T_{\text{half}} \approx 12.15~\mu\text{s}$$
 
-- **Lectura continua de un gráfico de $16 \times 16$ píxeles ($256$ bytes manteniendo `spi_cs_n = 0` sin liberar el bus con `cs_hold = 1`):**
+  - **Lectura continua de un gráfico de $16 \times 16$ píxeles ($256$ bytes manteniendo `spi_cs_n = 0` con `cs_hold = 1`):**
 
     $$T_{\text{gráfico } 16\times 16} = (4 + 256) \cdot T_{\text{byte}} \approx 616.3~\mu\text{s}$$
 
-    *(Equivale a menos del $3.7\%$ del presupuesto de cuadro de $16.67\text{ ms}$ a $60\text{ Hz}$).*
+    *(Esto representa menos del $3.7\%$ del presupuesto de cuadro de $16.67\text{ ms}$ a $60\text{ Hz}$, demostrando que $3.375\text{ MHz}$ es más que suficiente para cargar gráficos sin afectar la fluidez del juego).*
 
 ---
 
 ### 3.4 Diagrama de Flujo Funcional y Clasificación FSMD
 
-En el diagrama de flujo comportamental se clasifica cada operación según el bloque que la ejecuta: **Unidad de Control (amarillo)**, **Camino de Datos (verde)** o **Reinicio Compartido (gris)**:
+En el diagrama de flujo comportamental clasifiqué cada operación según el bloque físico que la ejecuta: **Unidad de Control (amarillo)**, **Camino de Datos (verde)** o **Reinicio Compartido (gris)**:
 
 ![Diagrama de Flujo Funcional y Clasificación FSMD](img/flujo_funcional_spi_g2.drawio.svg)
 
-- **Longitud de trama dinámica (`byte_done`):** Para soportar transacciones de diferente tamaño, el camino de datos no utiliza un límite fijo de bytes. Al arrancar, decodifica el código de operación (`cmd_reg`) para definir la longitud total de la transferencia en un registro interno `len` (por ejemplo, si el comando es `0x06` WREN, `len = 1`; si es `0x20` borrado de sector, `len = 4`; para lectura o escritura simple, `len = 5`). La bandera `byte_done` se activa dinámicamente cuando el contador alcanza esta longitud.
-- **Retención de señal (`done` retenido):** Para evitar que el procesador FemtoRV32 (que consulta el estado de forma periódica a una frecuencia distinta) pierda la bandera de finalización, la señal `done` dejó de ser un pulso de un solo ciclo. Ahora opera como una bandera retenida en registro que permanece en `1` tras finalizar el estado `STOP` y solo se limpia (`0`) cuando el procesador inicia una nueva transmisión con `start = 1`.
-- **Gestión de transferencias múltiples (`cs_hold`):** El bit `cs_hold` permite mantener `spi_cs_n` en bajo durante una lectura continua en ráfaga. Sin embargo, por especificación de la memoria `W25Q64JV`, **cada vez que se libera `spi_cs_n` (sube a `1`) y se vuelve a bajar, es obligatorio reenviar el comando y la dirección de $24$ bits**; no es posible pausar una lectura soltando el bus y retomarla sin retransmitir la cabecera completa.
+Para que el controlador sea realmente práctico desde el software en C, incorporé tres decisiones de diseño clave:
+
+- **Longitud de trama dinámica (`byte_done`):** No todas las operaciones de la Flash miden lo mismo. Si usara un contador fijo de $5$ bytes, no podría enviar comandos de $1$ byte como `0x06` (*Write Enable*) sin enviar $4$ bytes basura adicionales. Por eso, al iniciar la transacción, el camino de datos decodifica el código de operación (`cmd_reg`) y carga la longitud exacta en un registro interno `len` (`1` byte para `0x06`, `4` bytes para `0x20` y `5` bytes para `0x03`/`0x02`). La bandera `byte_done` se activa dinámicamente cuando `byte_cnt` alcanza `len - 1`.
+- **Retención de la bandera `done`:** Si `done` fuera un pulso de un solo ciclo de reloj ($37.04\text{ ns}$), el procesador FemtoRV32 —que tarda varios ciclos en ejecutar cada instrucción de lectura por bus— casi nunca alcanzaría a verlo. Por esa razón, diseñé `done` como una bandera síncrona retenida en registro: se pone en `1` al finalizar el estado `STOP` y se mantiene así hasta que el CPU limpia la condición iniciando una nueva transferencia con `start = 1` (o aplicando `rst = 1`).
+- **Gestión de transferencias múltiples (`cs_hold`):** El bit `cs_hold` permite mantener `spi_cs_n` en bajo al terminar un byte para seguir leyendo direcciones consecutivas aprovechando el autoincremento interno de la `W25Q64JV`. Sin embargo, hay que tener en cuenta una restricción física del chip: **si se libera `spi_cs_n` (sube a `1`), la memoria reinicia su máquina interna**, por lo que para volver a leer es obligatorio enviar de nuevo el comando `0x03` y los $3$ bytes de dirección.
 
 ---
 
 ### 3.5 Carta ASMD, FSM de Control y Tabla de Transferencias RT
 
-Con base en la separación FSMD, definimos una **Máquina de Estados Finitos (FSM)** de $5$ estados codificados en $3$ bits (`state[2:0]`) y su **Carta ASMD** con las transferencias entre registros (RT) en cada flanco de subida de `clk`. Cada fila incluye un identificador (`T0`–`T11`) para trazar directamente los casos de prueba del *testbench*:
+Con base en la separación FSMD, implementé una **Máquina de Estados Finitos (FSM)** de $5$ estados codificados en $3$ bits (`state[2:0]`) y su **Carta ASMD** con las transferencias entre registros (RT) en cada flanco de subida de `clk`. Numeré cada transición (`T0`–`T12`) para poder verificarlas una por una en el banco de pruebas:
 
 #### Diagrama de Estados (FSM)
 ![Diagrama de Estados (FSM) del Controlador Flash SPI](img/fsm_spi_g2.drawio.svg)
@@ -263,9 +266,10 @@ Con base en la separación FSMD, definimos una **Máquina de Estados Finitos (FS
   - `byte_cnt == 0` $\rightarrow$ `addr_reg[23:16]`
   - `byte_cnt == 1` $\rightarrow$ `addr_reg[15:8]`
   - `byte_cnt == 2` $\rightarrow$ `addr_reg[7:0]`
-  - `byte_cnt >= 3` $\rightarrow$ `tx_reg` (en lectura `0x03` envía `8'h00` como byte de relleno).
+  - `byte_cnt >= 3` $\rightarrow$ `tx_reg` (en lectura `0x03` envía `8'h00` como byte de relleno para generar los pulsos de reloj).
 
 ---
+
 ## 4. Inferencia y Manejo de BRAM Dual-Port
 
 Como el FemtoRV32 escribe píxeles mientras el controlador de video (G4) barre continuamente el panel LED $64 \times 64$ en modo $1/32$ *scan*, se requiere acceso simultáneo de escritura y lectura sin colisiones. Para ello se instancian **dos bancos independientes de BSRAM *Simple Dual-Port*** (`SDPB`) de $2048 \times 3$ bits ($1.5\text{ KB}$ útiles en total, mapeados en 2 bloques BSRAM físicos).
