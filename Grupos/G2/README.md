@@ -187,7 +187,7 @@ Con base en la separación FSMD, definimos una **Máquina de Estados Finitos (FS
 ![Diagrama de Estados (FSM) del Controlador Flash SPI](img/fsm_spi_g2.drawio.svg)
 
 #### Carta ASMD (Camino de Datos y Transferencias RT)
-![Carta ASMD del Controlador Flash SPI](img/asmd_spi_g2.png.drawio.svg)
+![Carta ASMD del Controlador Flash SPI](img/asmd_spi_g2.drawio.svg)
 
 #### Tabla de Estados y Transferencias RT (`spi_fsm_control` + `spi_datapath`)
 
