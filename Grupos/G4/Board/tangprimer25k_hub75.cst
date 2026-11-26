@@ -1,0 +1,49 @@
+// =============================================================================
+// tangprimer25k_hub75.cst — Pines del panel HUB75 en la Tang Primer 25K (Dock)
+//
+// Probados en placa con el panel Seengreat P3.0 64x64: la imagen de prueba se
+// ve completa y con los colores en orden R, G, B.
+// Todos los pines en LVCMOS33. El GND de la placa va unido al GND del panel.
+// =============================================================================
+
+// --- Reloj (50 MHz) y reset (botón, activo en bajo) ---
+IO_LOC "clk" E2;
+IO_PORT "clk" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC "resetn" H11;
+IO_PORT "resetn" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+
+// --- Color, mitad superior (filas 0-31) ---
+IO_LOC "r1" K2;
+IO_PORT "r1" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "g1" L1;
+IO_PORT "g1" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "b1" K4;
+IO_PORT "b1" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+
+// --- Color, mitad inferior (filas 32-63) ---
+IO_LOC "r2" L3;
+IO_PORT "r2" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "g2" C2;
+IO_PORT "g2" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "b2" F1;
+IO_PORT "b2" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+
+// --- Dirección de fila A..E ---
+IO_LOC "addr_a" D1;
+IO_PORT "addr_a" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "addr_b" J2;
+IO_PORT "addr_b" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "addr_c" H4;
+IO_PORT "addr_c" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "addr_d" H2;
+IO_PORT "addr_d" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "addr_e" A1;
+IO_PORT "addr_e" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+
+// --- Control ---
+IO_LOC "hub75_clk" J7;
+IO_PORT "hub75_clk" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "hub75_lat" L8;
+IO_PORT "hub75_lat" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC "hub75_oe" K10;
+IO_PORT "hub75_oe" IO_TYPE=LVCMOS33 PULL_MODE=DOWN DRIVE=8;
