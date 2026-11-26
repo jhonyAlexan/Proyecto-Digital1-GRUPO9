@@ -18,27 +18,46 @@
 
 ## 1. Delimitación y Selección de Tecnologías de Memoria
 
-Trabajamos sobre la **Sipeed Tang Nano 9K** (FPGA Gowin GW1NR-9), usando el flujo abierto **Yosys + nextpnr** y el procesador **FemtoRV32** (reloj maestro de $27\text{ MHz}$) con arquitectura Von Neumann. Como la memoria interna **BSRAM** de esta FPGA es limitada —en total son $58.5\text{ KB}$ repartidos en $26$ bloques de $18\text{ Kbit}$— y se comparte entre el código del procesador y el video gestionado por G4, dividimos el almacenamiento del sistema en dos niveles:
+Para diseñar el subsistema de memorias de la consola partí de las restricciones físicas de la tarjeta **Sipeed Tang Nano 9K** (FPGA Gowin GW1NR-9), trabajando con el flujo abierto **Yosys + nextpnr** y el procesador **FemtoRV32** a una frecuencia única de $27\text{ MHz}$.
+
+El FemtoRV32 usa arquitectura **Von Neumann**, lo que significa que las instrucciones del programa y los datos del juego comparten el mismo espacio de direcciones y el mismo bus. Esto simplifica mucho la conexión con los periféricos, pero me obliga a administrar con cuidado la memoria interna disponible. La FPGA cuenta con $26$ bloques de memoria **BSRAM** de $18\text{ Kbit}$ cada uno, lo que da un total bruto de $58.5\text{ KB}$. Sin embargo, en la práctica, cuando el procesador accede a palabras de $8$, $16$ o $32$ bits sin usar bits de paridad, cada bloque aporta $2\text{ KB}$ útiles ($16\text{ Kbit}$), dejándonos unos $52\text{ KB}$ aprovechables en toda la FPGA.
+
+Como en ese espacio interno no caben todos los gráficos, mapas y puntajes de varios juegos arcade, decidí dividir el almacenamiento en una **jerarquía de dos niveles**:
+
+- **Nivel 1 (BSRAM interna de la FPGA):** para lo que necesita respuesta inmediata en $1$ solo ciclo de reloj ($37.04\text{ ns}$), es decir, el código del juego que ejecuta el CPU, las variables activas y el acceso rápido al video.
+- **Nivel 2 (Flash NOR SPI externa):** para almacenamiento masivo y no volátil ($8\text{ MB}$), donde guardo los gráficos 2D, mapas de niveles y puntajes máximos que no se pierden al apagar la consola.
 
 ### 1.1 Comparativa y Justificación de Tecnologías de Memoria
 
-| Tecnología de Memoria | Componente / Modelo | Capacidad | Protocolo e Interfaz | Pines Físicos | Velocidad / Latencia | Rol y Justificación en la Consola |
+Antes de definir la arquitectura final, comparé las opciones de memoria viables para la Tang Nano 9K teniendo en cuenta tres criterios: cantidad de pines físicos disponibles, latencia de acceso y facilidad de síntesis en Verilog sin depender de bloques propietarios.
+
+| Tecnología de Memoria | Componente / Modelo | Capacidad | Protocolo e Interfaz | Pines Físicos | Velocidad / Latencia | Rol y Justificación en mi Diseño |
 | :--- | :--- | :---: | :--- | :---: | :--- | :--- |
-| **BSRAM Interna** *(Nivel 1 — En uso)* | Bloques `SDPB` del chip Gowin GW1NR-9 | $58.5\text{ KB}$ ($26 \times 18\text{ Kbit}$) | Bus paralelo síncrono ($27\text{ MHz}$) | $0$ externos (interna) | $1$ ciclo de reloj ($37.04\text{ ns}$) | Aloja la memoria principal de programa/datos del CPU ($32\text{ KB}$, incluyendo los $6$ registros reservados para los dos controles). Además, la FPGA aloja internamente el framebuffer ($1.5\text{ KB}$) instanciado directamente dentro del periférico HUB75 de G4. |
-| **Flash NOR SPI Externa** *(Nivel 2 — En uso)* | Winbond `W25Q64JV` (en placa o módulo DIP8) | $8\text{ MB}$ ($64\text{ Mbit}$) | SPI síncrono Modo 0 (`CS#`, `SCLK`, `MOSI`, `MISO`), región MMIO `0x0045` | $4$ pines | $f_{\text{SCLK}} = 3.375\text{ MHz}$ ($2.37~\mu\text{s/byte}$) | Almacena de forma no volátil los *sprites* 2D, mapas de nivel, tablas de sonido y puntajes máximos (*High-Scores*) escribiendo directo por sector. |
-| **PSRAM / SRAM Externa** *(Descartada)* | `APS6404L` / `IS61WV25616` | $8\text{ MB}$ / $512\text{ KB}$ | QSPI / Bus paralelo asíncrono | $6$ a $38$ pines | Media / Alta | No hace falta: el firmware cabe en los $32\text{ KB}$ de BSRAM interna y el framebuffer de G4 ($1.5\text{ KB}$) también reside en BSRAM sin gastar pines ni introducir latencia al barrido HUB75. |
-| **EEPROM $\text{I}^2\text{C}$** *(Descartada)* | Microchip `AT24C256` | $32\text{ KB}$ ($256\text{ Kbit}$) | $\text{I}^2\text{C}$ (`SDA`, `SCL`) | $2$ pines | $100\text{–}400\text{ kHz}$ (lenta) | Redundante teniendo $8\text{ MB}$ libres en la Flash `W25Q64JV`, donde podemos borrar sectores de $4\text{ KB}$ (`0x20`) y grabar páginas (`0x02`) para los *High-Scores*. |
+| **BSRAM Interna** *(Nivel 1 - En uso)* | Bloques `SDPB` del chip Gowin GW1NR-9 | $58.5\text{ KB}$ brutos ($26 \times 18\text{ Kbit}$) | Bus paralelo síncrono ($27\text{ MHz}$) | $0$ externos (interna) | $1$ ciclo de reloj ($37.04\text{ ns}$) | La elegí como memoria principal de programa y datos del CPU ($32\text{ KB}$), incluyendo los $6$ registros reservados para los dos controles. También es la memoria que usa G4 internamente para su memoria de video ($1.5\text{ KB}$). |
+| **Flash NOR SPI Externa** *(Nivel 2 - En uso)* | Winbond `W25Q64JV` (integrada en placa o módulo DIP8) | $8\text{ MB}$ ($64\text{ Mbit}$) | SPI síncrono Modo 0 (`CS#`, `SCLK`, `MOSI`, `MISO`), región MMIO `0x0045` | $4$ pines | $f_{\text{SCLK}} = 3.375\text{ MHz}$ ($2.37~\mu\text{s/byte}$) | La seleccioné porque ofrece $8\text{ MB}$ no volátiles gastando solo $4$ pines. Permite leer gráficos y mapas al arrancar el juego y guardar puntajes máximos borrando sectores de $4\text{ KB}$ y escribiendo por página. |
+| **PSRAM / SRAM Externa** *(Descartada)* | `APS6404L` / `IS61WV25616` | $8\text{ MB}$ / $512\text{ KB}$ | QSPI / Bus paralelo asíncrono | $6$ a $38$ pines | Media / Alta (requiere estados de espera) | La descarté porque complica el controlador del bus sin necesidad. El firmware del juego cabe en $32\text{ KB}$ de BSRAM interna y la pantalla solo necesita $1.5\text{ KB}$, así que agregar RAM externa solo gastaría pines y metería latencia extra. |
+| **EEPROM $\text{I}^2\text{C}$** *(Descartada)* | Microchip `AT24C256` | $32\text{ KB}$ ($256\text{ Kbit}$) | $\text{I}^2\text{C}$ (`SDA`, `SCL`) | $2$ pines | $100\text{–}400\text{ kHz}$ (lenta) | La descarté por redundante y lenta. Teniendo $8\text{ MB}$ disponibles en la Flash `W25Q64JV` (donde puedo apartar un sector de $4\text{ KB}$ solo para puntajes), no tiene sentido diseñar otro controlador periférico adicional en $\text{I}^2\text{C}$. |
+
+**¿Por qué elegí SPI Modo 0 y no QSPI para la Flash?**
+Aunque la `W25Q64JV` soporta QSPI (4 líneas de datos simultáneas), elegí **SPI estándar en Modo 0** ($\text{CPOL} = 0$, $\text{CPHA} = 0$) porque las líneas `MOSI` y `MISO` son unidireccionales. Eso evita tener que manejar pines bidireccionales de alta impedancia (`tri-state`) en la FPGA, reduce el uso de pines físicos a $4$ y simplifica la máquina de estados del controlador. A $3.375\text{ MHz}$, cargar un gráfico completo de $16 \times 16$ píxeles toma menos de $0.62\text{ ms}$, tiempo suficiente para una consola arcade.
 
 ### 1.2 Presupuesto de BSRAM Interna en la Tang Nano 9K
 
-Los $26$ bloques BSRAM ($58.5\text{ KB}$) disponibles en la Gowin GW1NR-9 quedan contabilizados así en el SoC:
+Para asegurarme de que el proyecto sintetice sin quedarse sin memoria interna, hice el reparto de los $26$ bloques BSRAM físicos de la Gowin GW1NR-9 contemplando tanto mi módulo como el video de G4:
 
-1. **`BRAM_PROG_DATA` (`0x0000_0000` – `0x0000_7FFF`) — Gestionada por G2:** $32.0\text{ KB}$ ($15$ bloques BSRAM) para el firmware en C/RISC-V de los juegos arcade (G6), el *stack*, las variables de estado y la zona reservada de **$6$ registros para los dos controles**:
-   * **Control 1 (J1):** direcciones `42` (`CTRL1_JOY_X`), `43` (`CTRL1_JOY_Y`) y `44` (`CTRL1_ATAQUE`).
-   * **Control 2 (J2):** direcciones `45` (`CTRL2_JOY_X`), `46` (`CTRL2_JOY_Y`) y `47` (`CTRL2_ATAQUE`).
-2. **Framebuffer HUB75 (`0x0044_4000`) — Instanciado internamente por G4:** $1.5\text{ KB}$ ($2$ bloques BSRAM en modo *Simple Dual-Port*). *Nota de integración:* G2 ya no instancia ni mapea `FRAMEBUFFER_BRAM` en `0x2000_0000`, pues el subgrupo G4 lo absorbió dentro de su propio periférico (`0x0044`); se incluye aquí únicamente para llevar el balance real de bloques físicos de la FPGA.
-3. **Reserva libre:** Quedan $25.0\text{ KB}$ ($9$ bloques BSRAM) disponibles en la FPGA para futuras tablas de audio (G5 I2S) o caché de *sprites* activos en RAM.
+1. **`BRAM_PROG_DATA` (`0x0000_0000` – `0x0000_7FFF`) - Gestionada por G2:**
+   Asigné **$32\text{ KB}$** para el programa en C compilado para RISC-V (G6), la pila (*stack*) y las variables del juego. Elegí $32\text{ KB}$ porque es potencia de dos (facilita decodificar las direcciones usando los bits `[14:2]` sin comparadores complejos) y da margen de sobra para la lógica de un juego retro.
+   - *Bloques físicos usados:* $16$ bloques BSRAM en mapeo estándar de $2\text{ KB}$ útiles por bloque ($16 \times 16\text{ Kbit} = 32\text{ KB}$).
+   - *Reserva fija para los dos controles:* Dentro de esta RAM dejé $6$ direcciones reservadas específicamente para almacenar el estado de los dos mandos ($3$ registros por jugador: eje X, eje Y y botón de ataque). Decidí ubicarlos en direcciones fijas consecutivas para que el código del juego pueda leer ambos controles en $1$ ciclo de reloj sin depender de los tiempos de llegada de la UART:
+     - **Control 1 (Jugador 1):** dirección `42` (`CTRL1_JOY_X`), dirección `43` (`CTRL1_JOY_Y`) y dirección `44` (`CTRL1_ATAQUE`).
+     - **Control 2 (Jugador 2):** dirección `45` (`CTRL2_JOY_X`), dirección `46` (`CTRL2_JOY_Y`) y dirección `47` (`CTRL2_ATAQUE`).
 
+2. **Memoria de video HUB75 (`0x0044_4000`) - Instanciada internamente por G4:**
+   Ocupa **$1.5\text{ KB}$ útiles**, pero consume **$2$ bloques BSRAM físicos** en modo *Simple Dual-Port*. Aunque $1.5\text{ KB}$ cabrían teóricamente en un solo bloque de $2\text{ KB}$, el panel LED $64 \times 64$ hace barrido doble (lee una fila de la mitad superior y otra de la mitad inferior al mismo tiempo), por lo que requiere dos bancos separados para entregar ambos píxeles en paralelo en el mismo ciclo de reloj.
+   - *Aclaración de integración:* Inicialmente yo tenía planeado mapear esta memoria desde G2 en `0x2000_0000`, pero acordé con G4 que ellos la instanciaran directamente dentro de su periférico en `0x0044_4000`. La cuento aquí únicamente para llevar el balance real de bloques ocupados en la FPGA.
+
+3. **Reserva libre en la FPGA:**
+   Restando los $16$ bloques de `BRAM_PROG_DATA` y los $2$ bloques del video de G4, me quedan **$8$ bloques BSRAM libres** ($16\text{ KB}$ útiles / $18\text{ KB}$ brutos). Este margen queda disponible por si G5 necesita tablas de ondas para el audio I2S o si G6 requiere espacio extra para variables en RAM.
 ---
 
 ## 2. Arquitectura del Sistema y Mapa de Memoria MMIO
@@ -256,7 +275,7 @@ El espacio MMIO asignado abarca $16\text{ KB}$ ($4096$ palabras de 32 bits, 1 p�
 
 Este módulo sigue el patrón síncrono estándar que reconoce **Yosys** para inferir bloques **BSRAM** físicos en Gowin sin instanciar primitivas propietarias ni consumir LUTs:
 
-```verilog
+verilog
 module framebuffer_dual_port (
     input  wire        clk,        // Reloj maestro unificado del SoC (27 MHz)
     // Puerto A: Interfaz de escritura MMIO desde FemtoRV32
