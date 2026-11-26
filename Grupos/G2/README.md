@@ -268,17 +268,23 @@ Con base en la separación FSMD, implementé una **Máquina de Estados Finitos (
   - `byte_cnt == 2` $\rightarrow$ `addr_reg[7:0]`
   - `byte_cnt >= 3` $\rightarrow$ `tx_reg` (en lectura `0x03` envía `8'h00` como byte de relleno para generar los pulsos de reloj).
 
----
+----
+## 4. Inferencia y Manejo de BRAM de Doble Puerto
 
-## 4. Inferencia y Manejo de BRAM Dual-Port
+Para que el procesador **FemtoRV32** pueda dibujar nuevos píxeles mientras el controlador de video (**G4**) lee continuamente la imagen para refrescar el panel LED $64 \times 64$ en modo de barrido $1/32$, necesito que ambos módulos accedan a la memoria al mismo tiempo sin bloquearse ni generar colisiones.
 
-Como el FemtoRV32 escribe píxeles mientras el controlador de video (G4) barre continuamente el panel LED $64 \times 64$ en modo $1/32$ *scan*, se requiere acceso simultáneo de escritura y lectura sin colisiones. Para ello se instancian **dos bancos independientes de BSRAM *Simple Dual-Port*** (`SDPB`) de $2048 \times 3$ bits ($1.5\text{ KB}$ útiles en total, mapeados en 2 bloques BSRAM físicos).
+Si utilizara una memoria de puerto único (*Single-Port*), el procesador y el controlador de pantalla tendrían que turnarse el bus mediante un árbitro, lo que detendría al CPU o provocaría parpadeos en los LEDs. Para evitarlo, diseñé el almacenamiento de video usando **dos bancos independientes de BSRAM de doble puerto simple (`SDPB`)**, cada uno de $2048 \times 3$ bits ($1.5\text{ KB}$ útiles en total, ocupando $2$ bloques físicos de la FPGA). Con esta configuración, el **Puerto A** queda dedicado exclusivamente a las escrituras del procesador y el **Puerto B** a las lecturas del barrido de video.
 
 ![Arquitectura de BRAM Dual-Port Alineada con G4](img/bram_dual_port_g2.drawio.svg)
 
 ### 4.1 Partición Física de Bancos (`0x2000_0000` – `0x2000_3FFF`)
 
-El espacio MMIO asignado abarca $16\text{ KB}$ ($4096$ palabras de 32 bits, 1 píxel por palabra alineada), usando `addr_a[13:2]` como índice lineal de píxel y almacenando únicamente los 3 bits de color `{R, G, B}`.
+Aunque los datos reales de la imagen ocupan $1.5\text{ KB}$, el rango de direcciones asignado en el bus MMIO abarca **$16\text{ KB}$** ($4,096$ palabras de $32$ bits). Tomé esta decisión para que cada píxel tenga su propia dirección alineada a palabra de $32$ bits (`addr_a[13:2]` como índice lineal de $0$ a $4,095$). De esta forma, el código del juego en C puede escribir directamente sobre un arreglo lineal sin gastar ciclos de reloj empaquetando varios píxeles dentro de una misma palabra con desplazamientos y máscaras de bits. En hardware, simplemente conecto los $3$ bits menos significativos del bus de datos (`din_a[2:0]`, correspondientes a `{R, G, B}`) y descarto los $29$ bits superiores sin gastar lógica adicional.
+
+**¿Por qué dividir la memoria en dos bancos si $1.5\text{ KB}$ caben en un solo bloque BSRAM?**
+Un bloque físico de la Gowin GW1NR-9 tiene $18\text{ Kbit}$ ($2\text{ KB}$ útiles), por lo que en teoría podría guardar los $4,096$ píxeles de $3$ bits en un único bloque. Sin embargo, el panel LED $64 \times 64$ con barrido $1/32$ actualiza **dos filas al mismo tiempo** en cada ciclo de reloj: una fila de la mitad superior (filas `0` a `31` por `R1, G1, B1`) y su fila paralela de la mitad inferior (filas `32` a `63` por `R2, G2, B2`). Como un bloque `SDPB` solo tiene un puerto de lectura, no puede entregar dos direcciones distintas en el mismo flanco de reloj. Al dividir la memoria en dos bancos independientes (`fb_upper_ram` y `fb_lower_ram`), ambos reciben en paralelo la misma coordenada `rd_addr_b` y entregan los dos píxeles simultáneamente.
+
+*(Nota de integración: este módulo de referencia se diseñó originalmente sobre el rango base `0x2000_0000` – `0x2000_3FFF` y fue adoptado por G4 dentro de su propio periférico bajo la dirección base `0x0044_4000`).*
 
 | Rango MMIO | Banco Físico BSRAM | Filas del Panel $64 \times 64$ | Geometría | Puerto A (Escritura CPU) | Puerto B (Lectura HUB75 G4) |
 | :--- | :---: | :---: | :---: | :--- | :--- |
@@ -287,13 +293,17 @@ El espacio MMIO asignado abarca $16\text{ KB}$ ($4096$ palabras de 32 bits, 1 p�
 
 ### 4.2 Plantilla de Inferencia Síncrona en Verilog (Yosys / Gowin `SDPB`)
 
-Este módulo sigue el patrón síncrono estándar que reconoce **Yosys** para inferir bloques **BSRAM** físicos en Gowin sin instanciar primitivas propietarias ni consumir LUTs:
+Para no atar el proyecto a primitivas propietarias del fabricante (`Gowin_SDPB`) y mantener la portabilidad en el flujo abierto **Yosys + nextpnr**, describí las memorias en Verilog comportamental siguiendo tres reglas estrictas de inferencia:
 
-verilog
+1. **Atributo explícito de bloque (`(* ram_style = "block" *)`):** Le indica directamente al sintetizador que mapee los arreglos sobre bloques BSRAM físicos y no sobre celdas lógicas distribuidas (LUTs), que se agotarían rápidamente con $12,288$ bits.
+2. **Lectura y escritura síncronas al mismo reloj (`posedge clk`):** Las salidas `rgb1_out` y `rgb2_out` se registran en el flanco de subida de `clk`. Si la lectura fuera combinacional (`assign`), Yosys no podría usar la BSRAM física porque los bloques de memoria de Gowin tienen registros de salida obligatorios.
+3. **Sin borrado global por `rst`:** No incluyo un lazo `for` de limpieza dentro del bloque `always`, ya que la memoria BSRAM física no posee una señal de reinicio simultáneo para todas sus celdas; el firmware inicializa la pantalla escribiendo ceros al arrancar.
+
+```verilog
 module framebuffer_dual_port (
     input  wire        clk,        // Reloj maestro unificado del SoC (27 MHz)
     // Puerto A: Interfaz de escritura MMIO desde FemtoRV32
-    input  wire        cs_fb,      // Selección región 0x2000_0000
+    input  wire        cs_fb,      // Selección región de memoria de video
     input  wire        wr,         // Habilitación de escritura bus CPU
     input  wire [13:2] addr_a,     // Índice lineal de píxel (0..4095)
     input  wire [2:0]  din_a,      // Color RGB de 3 bits {R, G, B}
@@ -307,6 +317,7 @@ module framebuffer_dual_port (
     (* ram_style = "block" *) reg [2:0] fb_upper_ram [0:2047];
     (* ram_style = "block" *) reg [2:0] fb_lower_ram [0:2047];
 
+    // Bit 13 selecciona entre la mitad superior (0) y la mitad inferior (1)
     wire we_upper = cs_fb & wr & ~addr_a[13];
     wire we_lower = cs_fb & wr &  addr_a[13];
 
@@ -318,15 +329,19 @@ module framebuffer_dual_port (
             fb_lower_ram[addr_a[12:2]] <= din_a;
     end
 
-    // Puerto B: Lectura síncrona dual-row para el barrido HUB75 (latencia = 1 ciclo)
+    // Puerto B: Lectura síncrona de doble fila para el barrido HUB75 (latencia = 1 ciclo)
     always @(posedge clk) begin
         rgb1_out <= fb_upper_ram[rd_addr_b];
         rgb2_out <= fb_lower_ram[rd_addr_b];
     end
 
 endmodule
+```
 
+### 4.3 Coherencia Temporal con el Controlador HUB75 (G4)
 
+- **Cumplimiento de latencia (`CLK_DIV` $\ge 2$):** Al registrar `rgb1_out` y `rgb2_out` en el flanco de subida de `clk` ($27\text{ MHz}$), el dato queda estable exactamente $1$ ciclo ($37.04\text{ ns}$) después de presentar la dirección `rd_addr_b`. Esto cumple la restricción de temporización de G4 (`CLK_DIV` $\ge 2$), asegurando que el reloj de desplazamiento del panel (`HUB75_CLK`) siempre capture píxeles estables.
+- **Prevención de cortes visuales (*tearing*) con la bandera `FRAME`:** El barrido completo de las $32$ filas tarda $T_{\text{frame}} = 32 \times 46.12~\mu\text{s} \approx 1.48\text{ ms}$ ($\approx 678\text{ Hz}$). Gracias a esta alta tasa de refresco y a que el software consulta el bit `FRAME` de `hub75_csr` antes de dibujar el siguiente cuadro, evitamos cortes visuales o parpadeos sin tener que gastar otros $2$ bloques BSRAM en un doble búfer (*double buffering*).
 ----
 
 ## 5. Protocolos
