@@ -1,5 +1,7 @@
-
 # G6: Arquitectura del Juego
+
+Somos el grupo que hace el firmware del juego de la consola: el programa en C que corre en el procesador femtoRV32. Ese programa lee lo que mandan los dos mandos, maneja la pelea y le dice a la pantalla qué dibujar y al módulo de sonido qué tocar.
+
 El juego es una pelea 1 contra 1 parecida a Smash. Partimos de una beta que el grupo ya tenía (Smash 8-bit) y la pasamos a C para que corra en la FPGA.
 
 Integrantes: Juan Esteban Salazar Cabra, Juan Diego Vega Ramírez y Andrés Camilo Bermúdez Molina.
@@ -210,4 +212,26 @@ La beta está en `web/pelea-beta.html` y se abre en el navegador. Usa el mismo c
 
 Pendiente. El SoC (`projecto/consola`) ya tiene el procesador, la UART del PC, el multiplicador y el lugar del GPIO. Falta conectar la pantalla del G4 (`0x0044`), el sonido del G5 (`0x0043`) y el periférico de mandos del G5 (`0x0047`). Cuando estén, primero cargamos el programa de [`pruebas/`](pruebas/README.md) y después el juego.
 
+## Preguntas abiertas
 
+- [ ] G2: el `chip_select` del SoC hoy decodifica de `0x0040` a `0x0045`. Para los mandos hace falta agregar `0x0047`: si no, esas direcciones caen en la RAM. ¿El SoC final corre a 27 MHz, como dicen los README del G2, G4 y G5? (En el esqueleto, la Colorlight está configurada a 25 MHz.)
+- [ ] G5: ¿cuándo queda listo el banco de registros de los mandos? ¿Los tonos que elegimos para cada efecto suenan bien en el parlante?
+- [ ] G3: ¿el bit de golpe llega en el registro de los mandos (bit 17) o en un registro propio (`0x0046`)?
+- [ ] G4: ¿basta con esperar a que cambie `FRAME` para no ver la imagen partida, o se necesita un segundo framebuffer?
+
+## Registro de avances y aportes
+
+| Fecha | Integrante | Aporte | Estado |
+|---|---|---|---|
+| 2026-11-10 | Juan Esteban Salazar Cabra | README y diagrama de flujo | Hecho |
+| 2026-11-10 | Juan Diego Vega Ramírez | Lógica del juego, recepción de la trama y bucle principal | Hecho |
+| 2026-11-10 | Andrés Camilo Bermúdez Molina | Dibujo de la pantalla, registros de hardware y beta web | Hecho |
+| 2026-11-11 | Juan Diego Vega Ramírez | Golpe con el giroscopio, escudo, pantalla de inicio y revancha | Hecho |
+| 2026-11-11 | Andrés Camilo Bermúdez Molina | Dibujo del escudo y de las pantallas de inicio y fin | Hecho |
+| 2026-11-11 | Juan Esteban Salazar Cabra | README y diagrama con el escudo y la revancha | Hecho |
+| 2026-11-19 | Juan Diego Vega Ramírez | Isla más grande, plataformas, caída más lenta y empuje según el daño | Hecho |
+| 2026-11-19 | Andrés Camilo Bermúdez Molina | Dibujos del robot y el caballero, plataformas y beta final | Hecho |
+| 2026-11-19 | Juan Esteban Salazar Cabra | README final y los dos diagramas de flujo | Hecho |
+| 2026-11-26 | Juan Diego Vega Ramírez | Lectura de los mandos por los registros del G5 (`controles.c`) y bucle sin sondeo de la UART | Hecho |
+| 2026-11-26 | Andrés Camilo Bermúdez Molina | `hardware.c` con el mapa de los otros grupos: pantalla en `0x0044`, sonido por tonos en `0x0043`, mandos en `0x0047`, botones del GPIO y reloj de 27 MHz; beta actualizada | Hecho |
+| 2026-11-26 | Juan Esteban Salazar Cabra | README con la interfaz real, programa de pruebas en la FPGA y su simulación con los periféricos nuevos | Hecho |

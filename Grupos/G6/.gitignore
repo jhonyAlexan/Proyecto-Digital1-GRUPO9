@@ -3,3 +3,12 @@ firmware/*.elf
 firmware/*.bin
 firmware/firmware.hex
 web/juego.wasm
+pruebas/*.o
+pruebas/*.elf
+pruebas/*.bin
+pruebas/pruebas.hex
+pruebas/simulacion/*.o
+pruebas/simulacion/sim*
+pruebas/simulacion/pruebas.hex
+pruebas/simulacion/p*_*.txt
+pruebas/simulacion/juego.hex
