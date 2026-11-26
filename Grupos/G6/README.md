@@ -1,35 +1,40 @@
+
 # G6: Arquitectura del Juego
+El juego es una pelea 1 contra 1 parecida a Smash. Partimos de una beta que el grupo ya tenía (Smash 8-bit) y la pasamos a C para que corra en la FPGA.
 
-Carpeta del equipo G6 dentro del proyecto **Consola de videojuegos sobre FPGA** (Diseño Digital 1, UNAL). El equipo escribe el **firmware del juego**: el programa en C que corre en el procesador femtoRV32 de la consola, lee las tramas de los dos mandos, ejecuta la pelea y escribe en la pantalla y en el sonido. El juego es tipo Smash: la física y las reglas vienen de la beta previa del grupo (Smash 8-bit, punto fijo Q8.8) y aquí están pasadas a C.
-
-| Integrantes |
-|---|
-| Juan Esteban Salazar Cabra |
-| Juan Diego Vega Ramírez |
-| Andrés Camilo Bermúdez Molina |
+Integrantes: Juan Esteban Salazar Cabra, Juan Diego Vega Ramírez y Andrés Camilo Bermúdez Molina.
 
 ## Contenido de la carpeta
 
 ```
 G6/
-├── README.md        Este archivo
-├── diagramas/       Diagramas de flujo: el juego y la actualización de cada luchador (draw.io y PNG)
-├── firmware/        Programa en C para el femtoRV32 y su Makefile
-└── web/             Beta: el mismo juego compilado para probar en el navegador
+├── README.md
+├── diagramas/    diagramas de flujo (draw.io y PNG)
+├── firmware/     código en C del juego y su Makefile
+├── pruebas/      programa para probar entradas y salidas en la FPGA
+└── web/          beta para probar el juego en el navegador
 ```
 
 ## 1. Marco teórico
 
-- **Periféricos mapeados en memoria.** El procesador no ve cables: lee y escribe direcciones. Cada periférico (UART, pantalla, sonido) ocupa una ventana del mapa de memoria, como en el ejemplo `femtoriscv` del repositorio del curso.
-- **femtoRV32 Quark (RV32I).** No tiene multiplicación, división ni interrupciones. El juego no multiplica (usa desplazamientos, `y << 6` = y × 64) y revisa los periféricos por sondeo.
-- **Bucle de juego de paso fijo.** Cada cuadro hace siempre lo mismo (leer entradas, actualizar, dibujar) y espera a completar su tiempo, para que el juego vaya a la misma velocidad ([Game Programming Patterns, Game Loop](https://gameprogrammingpatterns.com/game-loop.html)).
-- **Máquinas de estado.** El juego y cada luchador están siempre en un solo estado, lo que evita combinaciones imposibles como moverse mientras está aturdido ([Game Programming Patterns, State](https://gameprogrammingpatterns.com/state.html)).
-- **Punto fijo Q8.8.** Posiciones y velocidades se guardan multiplicadas por 256 (8 bits de fracción). Así la física usa solo sumas y desplazamientos: la gravedad es +38 (0,15 px por cuadro) y la fricción `vx - (vx >> 2)` (× 0,75).
-- **Colisión AABB.** El golpe y el cuerpo del rival son rectángulos; hay impacto si se cruzan en X y en Y. Son 4 comparaciones.
+Estos son los conceptos que usamos para hacer el juego:
+
+- Periféricos mapeados en memoria: el procesador se comunica con los mandos, la pantalla y el sonido leyendo y escribiendo direcciones de memoria, igual que en el ejemplo `femtoriscv` del curso.
+- femtoRV32 Quark (RV32I): este procesador no tiene instrucciones para multiplicar ni dividir. Por eso en el código usamos desplazamientos, por ejemplo `y << 6` en vez de `y * 64`.
+- Bucle de juego: el programa repite lo mismo 60 veces por segundo (leer, actualizar, dibujar) y espera a que se cumpla el tiempo de cada cuadro, así el juego siempre va a la misma velocidad ([Game Loop](https://gameprogrammingpatterns.com/game-loop.html)).
+- Máquinas de estado: el juego y cada luchador están siempre en un solo estado. Así evitamos casos raros como que un luchador golpee mientras está aturdido ([State](https://gameprogrammingpatterns.com/state.html)).
+- Punto fijo Q8.8: guardamos las posiciones y velocidades multiplicadas por 256, para poder mover fracciones de píxel usando solo números enteros.
+- Colisión AABB: el golpe y el cuerpo de cada luchador son rectángulos, y hay impacto cuando los dos se cruzan.
 
 ## 2. Fundamento
 
-La consola es la única que decide: los mandos solo miden y envían. El juego abre con la pantalla de inicio (PELEA) y, con el botón, empieza la pelea entre el robot (J1) y el caballero (J2) en un escenario con una isla y tres plataformas encima. Cada jugador se mueve con el joystick: a los lados corre, arriba salta (con doble salto) y abajo se baja de una plataforma. Mientras mueve el mando, el giroscopio manda un 1 y el luchador golpea; con el mando quieto manda un 0 y no golpea. El botón del joystick es el escudo: mientras lo mantiene, el luchador se queda quieto y los golpes no le suben el daño. Cada golpe le sube el daño al rival y lo empuja; entre más daño tiene, más lejos sale volando. Como en Smash, salir de la isla no es perder: hay espacio fuera de la pantalla y se puede volver con el doble salto; un cuadrito en el borde muestra por dónde va el luchador. Solo quien pasa los límites de afuera pierde una de sus 3 vidas y reaparece arriba. 60 veces por segundo, el firmware toma la última trama válida de J1 y de J2, mueve a los luchadores, revisa golpes y caídas, dibuja el cuadro de 64×64 en la RAM y lo pasa a la pantalla, y le indica al módulo de sonido qué efecto tocar. Gana quien deje al otro sin vidas. En la pantalla final, el botón da la revancha; mantenerlo 2 s vuelve al inicio.
+Los mandos solo miden y envían; todas las decisiones las toma la consola.
+
+El juego empieza en una pantalla que dice PELEA. Cuando los dos mandos están conectados y alguien oprime el botón del joystick, empieza la pelea entre un robot (J1) y un caballero (J2), sobre una isla con tres plataformas encima.
+
+Cada jugador corre y salta con el joystick (tiene doble salto) y se baja de una plataforma empujándolo hacia abajo. Para golpear se mueve el mando: el giroscopio manda un 1 mientras hay movimiento. Mientras se mantiene el botón del joystick, el luchador se cubre con un escudo.
+
+Cada golpe le sube el daño al rival, y entre más daño tiene, más lejos sale volando. Salirse de la isla no es perder de una vez, porque hay espacio para volver con el doble salto. Solo pierde una vida el que se va muy lejos de la pantalla. Cada uno tiene 3 vidas y gana el que deje al otro sin ninguna. Al final, con el botón se juega la revancha, y si se mantiene 2 segundos se vuelve al inicio.
 
 ## 3. Etapa de diseño
 
@@ -37,63 +42,77 @@ La consola es la única que decide: los mandos solo miden y envían. El juego ab
 
 ```mermaid
 flowchart LR
-    T[Tramas de J1 y J2<br/>UART] --> F[Firmware del juego<br/>femtoRV32]
-   
+    T[Mandos J1 y J2<br/>registros del G5] --> F[Firmware del juego<br/>femtoRV32]
     F --> P[Pantalla 64x64<br/>G4]
     F --> S[Sonido<br/>G5]
 ```
 
 ### 3.2 Características de la interfaz
 
-**Trama de cada mando** (la arma la FPGA del mando y llega por Bluetooth a la UART de la consola, una cada 33 ms):
+Las direcciones salen de los README de cada grupo (26 de noviembre). Están todas en `firmware/hardware.h`, así que si alguna cambia solo se toca ese archivo.
+
+**Mandos (G5, región `0x0047`).** La ESP32 de cada mando manda 30 tramas por segundo de 8 bytes a 115 200 baudios:
 
 | Byte | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 |---|---|---|---|---|---|---|---|---|
 | Campo | Inicio | Jugador | Secuencia | Joystick X | Joystick Y | Botones | Ataque | Checksum |
-| Valor | `0xAA` | 1 o 2 | 0 a 255 | −127 a 127 (correr) | −127 a 127 (+ = saltar, − = bajar de una plataforma) | bit 0 = botón del joystick (escudo) | bit 0 = movimiento del mando (golpe) | XOR de los bytes 1 a 6 |
+| Valor | `0xAA` | 1 o 2 | 0 a 255 | −127 a 127 | −127 a 127 | bit 0: botón | bit 0: movimiento | XOR de los bytes 1 a 6 |
 
-- El bit de ataque es lo que manda el G3 desde el giroscopio: 1 mientras el mando se mueve, 0 cuando está quieto. Con 1 el luchador golpea; si sigue en 1, da un golpe cada 18 cuadros (0,3 s).
-- El botón del joystick es el escudo durante la pelea. En las pantallas de inicio y fin sirve para empezar.
-- Una trama cada 33 ms por mando son 2 × 8 × 30 × 10 = 4 800 bits/s: cabe en la UART a 9 600 baudios que probó el G1. El juego corre a 60 cuadros/s y usa cada trama durante 2 cuadros.
-- Si el XOR no coincide, la trama se descarta y se usa la anterior.
+El periférico de mandos del G5 recibe esas tramas, revisa el checksum y guarda la última válida de cada jugador. Nosotros solo leemos sus registros una vez por cuadro:
 
-**Registros que usa el firmware:**
-
-| Periférico | Registro | Uso en el juego |
+| Dirección | Registro | Qué tiene |
 |---|---|---|
-| UART (G1) | `+0x10` control, `+0x08` dato | Bit 8 = llegó un byte (mismos registros que `getChar()` del curso) |
-| Pantalla (G4) | `CONTROL` `0x00` | Escribe 1 al iniciar (EN) |
-| Pantalla (G4) | `PIXEL_ADDR` `0x08` | Escribe 0 antes de cada cuadro |
-| Pantalla (G4) | `PIXEL_DATA` `0x0C` | 4 096 escrituras por cuadro, color `{R,G,B}` |
-| Pantalla (G4) | `FRAME` `0x10` | Espera a que cambie antes de escribir |
-| Sonido (G5) | `+0x00` | Código del efecto: 1 empezar, 4 golpe, 8 caída (pierde una vida), 9 fin |
-| Botón de inicio | `+0x00` | Bit 0 |
+| `0x0047_0000` | `JOY1_DATA` | J1: `[7:0]` X, `[15:8]` Y, `[16]` botón, `[17]` ataque, `[31:24]` secuencia |
+| `0x0047_0004` | `JOY2_DATA` | J2, con los mismos campos |
+| `0x0047_0008` | `STATUS` | bit 0 llegó algo de J1, bit 1 de J2, bit 2 error de UART, bit 3 error de checksum |
 
-Las direcciones base están en `firmware/hardware.h` y son una propuesta hasta que exista `memory_map.yml` (G2).
+- El joystick X sirve para correr. En el Y, hacia arriba es saltar y hacia abajo es bajarse de una plataforma.
+- El botón del joystick sirve para empezar la partida y, durante la pelea, para el escudo.
+- El bit de ataque lo calcula el G3 con el giroscopio: vale 1 mientras el mando se mueve. Si se queda en 1, el luchador golpea cada 0,3 s.
+- Un mando cuenta como conectado si su secuencia cambió en el último segundo.
+
+**Pantalla (G4, región `0x0044`).**
+
+| Dirección | Registro | Para qué lo usamos |
+|---|---|---|
+| `0x0044_0000` | `CONTROL` | Escribir 1 al iniciar para encenderla |
+| `0x0044_0010` | `FRAME` | Esperar a que cambie antes de escribir el cuadro (máximo 1/60 s) |
+| `0x0044_4000` a `0x0044_7FFC` | píxeles | El píxel (x, y) va en `0x0044_4000 + 4·(64·y + x)`, con el color `{R, G, B}` |
+
+**Sonido (G5, región `0x0043`).** El periférico genera tonos con `FREQ` (`0x0043_0000`), `VOL` (`0x0043_0004`) y `CONTROL` (`0x0043_0008`, bit 0 = suena). Con el reloj de 27 MHz, `FREQ = f · 65536 / 46875`. Cada efecto del juego es un tono:
+
+| Efecto | Tono | `FREQ` | Duración |
+|---|---|---|---|
+| Empezar | 880 Hz | 1230 | 0,1 s |
+| Golpe | 220 Hz | 308 | 0,07 s |
+| Caída (pierde una vida) | 110 Hz | 154 | 0,3 s |
+| Fin | 523 Hz | 732 | 0,5 s |
+
+**Botones de la consola (GPIO del SoC, `0x0041_0008`).** El botón 1 también sirve para empezar, pero es opcional: todo se puede hacer con el botón del joystick.
 
 ### 3.3 Diagrama de bloques
 
 ```mermaid
 flowchart TB
-    M[main.c<br/>bucle a 60 cuadros/s] --> J[juego.c<br/>física, golpes, escudo y vidas]
+    M[main.c<br/>bucle a 60 cuadros/s] --> J[juego.c<br/>reglas del juego]
     M --> P[pantalla.c<br/>dibujo 64x64]
-    J --> C[controles.c<br/>trama y checksum]
+    J --> C[controles.c<br/>estado de los mandos]
     P --> H[hardware.c<br/>registros]
     C --> H
     M --> H
 ```
 
-Solo `hardware.c` conoce direcciones. Si otro grupo cambia un registro, se cambia ese archivo y el resto queda igual.
+Separamos el código así para que solo `hardware.c` tenga direcciones de memoria. Si otro grupo cambia un registro, solo hay que tocar ese archivo.
 
 ### 3.4 Diagramas de flujo
 
-Símbolos de la norma ISO 5807: terminal (óvalo), proceso (rectángulo), entrada o salida de datos (paralelogramo), proceso predefinido (rectángulo con doble lado), decisión (rombo) y anotación (corchete).
+Hicimos los diagramas con los símbolos de la norma ISO 5807.
 
-**Diagrama 1: el juego.** Es cíclico, así que no tiene terminal de fin: después del ganador viene la revancha o se vuelve a la pantalla de inicio. Cada vuelta de "Leer las tramas" a "Esperar a completar 1/60 s" es un cuadro.
+Diagrama 1, el juego completo. No tiene terminal de fin porque el programa nunca termina: después del ganador viene la revancha o se vuelve al inicio.
 
 ![Diagrama de flujo del juego](diagramas/flujo-juego-pelea.png)
 
-**Diagrama 2: actualizar un luchador.** Es el proceso predefinido "Actualizar a J1 y a J2" del diagrama 1; se hace una vez por luchador en cada cuadro. El orden de las decisiones da la prioridad: aturdido o golpeando no hace nada, luego escudo, luego golpe, luego salto.
+Diagrama 2, lo que hace cada luchador en un cuadro. Es el proceso "Actualizar a J1 y a J2" del diagrama 1. El orden de las preguntas es la prioridad: si está aturdido o golpeando no hace nada más; si no, primero va el escudo, después el golpe y después el salto.
 
 ![Diagrama de flujo de actualizar un luchador](diagramas/flujo-actualizar-luchador.png)
 
@@ -101,14 +120,13 @@ Símbolos de la norma ISO 5807: terminal (óvalo), proceso (rectángulo), entrad
 
 | Unidad de control | Ruta de datos |
 |---|---|
-| Estado del juego (INICIO, JUGANDO, FIN) | Posición y velocidad Q8.8, daño y vidas de cada luchador |
-| Estado de cada luchador y sus temporizadores (golpe, pausa, aturdido, invulnerable) | Bytes de la trama recibida |
-| Decisiones del diagrama 1: ¿botón?, ¿mandos conectados?, ¿un golpe toca al rival?, ¿salió del escenario?, ¿sin vidas?, ¿mantuvo 2 s? | Isla y plataformas (coordenadas fijas) |
-| Decisiones del diagrama 2: ¿golpeando o aturdido?, ¿botón?, ¿mando en movimiento?, ¿joystick arriba con saltos?, ¿cae sobre la isla o una plataforma? | Arreglo de 4 096 píxeles |
+| Estado del juego (INICIO, JUGANDO, FIN) | Posición, velocidad, daño y vidas de cada luchador |
+| Estado de cada luchador y sus contadores de tiempo | Bytes de la trama recibida |
+| Las decisiones de los dos diagramas de flujo | Coordenadas de la isla y las plataformas, y los 4 096 píxeles |
 
 ### 3.6 Máquinas de estado
 
-**Juego:**
+Juego:
 
 ```mermaid
 stateDiagram-v2
@@ -119,7 +137,7 @@ stateDiagram-v2
     FIN --> INICIO: botón 2 s
 ```
 
-**Cada luchador:**
+Cada luchador:
 
 ```mermaid
 stateDiagram-v2
@@ -141,72 +159,55 @@ stateDiagram-v2
     ATURDIDO --> AIRE: 14 cuadros
 ```
 
+Valores que usamos (en punto fijo, 256 = 1 píxel):
+
 | Regla | Valor |
 |---|---|
-| Escenario | Isla en Y = 48, de X = 5 a X = 59. Plataformas: dos en Y = 36 (X 11 a 25 y X 39 a 53) y una en Y = 24 (X 24 a 40). Las plataformas se atraviesan desde abajo y con el joystick abajo |
-| Luchadores | Robot (J1) y caballero (J2), dibujos de 10 × 14 píxeles; la caja del cuerpo tiene ese mismo tamaño |
-| Correr | Aceleración 46, velocidad máxima 333 (1,3 px por cuadro) |
-| Salto | −691 (sube unos 24 px); doble salto, se recarga al pisar la isla o una plataforma |
-| Gravedad | +38 por cuadro, caída máxima 512 (2 px por cuadro) |
-| Golpe | Dura 10 cuadros; solo toca al rival en los cuadros 3 a 7. Caja de 8 × 5 píxeles delante del luchador, a la altura del brazo. Si el mando sigue en movimiento, espera 8 cuadros y golpea otra vez |
-| Al recibir un golpe | +7 % de daño, aturdido 14 cuadros. Sale hacia el lado con 150 + 4 × daño y hacia arriba con 350 + 2 × daño (máximo 900) |
-| Escudo | Mientras mantiene el botón: quieto, sin daño ni aturdido; el golpe solo lo corre un poco (120) |
-| En el aire | El empuje se frena: vx × 0,94 por cuadro |
-| Fuera de la pantalla | Un cuadrito del color del jugador en el borde muestra por dónde va |
-| Pierde una vida | Si pasa X < −36, X > 90, Y > 120 o Y < −40. El daño vuelve a 0 % y reaparece en (27, 14) |
-| Al reaparecer | 100 cuadros invulnerable (parpadea) |
-| Vidas | 3 por jugador |
+| Isla | Y = 48, de X = 5 a 59 |
+| Plataformas | Dos en Y = 36 y una en Y = 24; se atraviesan desde abajo |
+| Correr | Aceleración 46, velocidad máxima 333 |
+| Salto | −691, unos 24 píxeles de alto |
+| Gravedad | +38 por cuadro, caída máxima 512 |
+| Golpe | Dura 10 cuadros y pega del cuadro 3 al 7 |
+| Al recibir un golpe | +7 % de daño y sale empujado con 150 + 4 × daño |
+| Escudo | No sube el daño; solo empuja un poco (120) |
+| Pierde una vida | Si se va más allá de X < −36, X > 90, Y > 120 o Y < −40 |
+| Vidas | 3 por jugador; al reaparecer es invulnerable 100 cuadros |
 
 ## 4. Implementación en C
 
 | Archivo | Qué hace |
 |---|---|
-| `firmware/main.c` | Bucle: leer UART, actualizar, sonido, dibujar, enviar y esperar 16,7 ms (`rdcycle`) |
-| `firmware/juego.c` | Estados, física Q8.8, isla y plataformas, golpe con cajas AABB, escudo, empuje, caídas, vidas y revancha |
-| `firmware/controles.c` | Arma la trama byte por byte y revisa el XOR |
-| `firmware/pantalla.c` | Isla y plataformas, dibujos de 10 × 14 del robot y el caballero (se voltean según hacia dónde miran), escudo, golpe, cuadrito de quien está fuera de la pantalla, daño en % y vidas; pantallas de inicio y fin; letras de 3×5 |
-| `firmware/hardware.c` | Registros de la UART, la pantalla, el sonido y el botón |
-| `firmware/crt0.S`, `linker.ld` | Los del ejemplo del curso; al `linker.ld` se le agregó `ALIGN(4)` y `ALIGN(16)` para alinear la pila |
+| `main.c` | El bucle: lee los mandos, actualiza el juego, manda el sonido, dibuja, envía la imagen y espera 1/60 s |
+| `juego.c` | Las reglas: estados, física, golpes, escudo, plataformas, vidas y revancha |
+| `controles.c` | Saca X, Y, botón y ataque del registro de cada mando y sabe si está conectado. Para la beta también arma la trama byte por byte |
+| `pantalla.c` | Dibuja la isla, las plataformas, el robot, el caballero, el daño, las vidas y los textos |
+| `hardware.c` | Lee y escribe los registros de los periféricos: mandos, pantalla, sonido y botones |
+| `crt0.S`, `linker.ld` | Los del ejemplo del curso; al `linker.ld` le alineamos la pila |
 
-Compilar (con el entorno del curso):
+Para compilar, con el entorno del curso:
 
 ```
 cd firmware
-make        # genera firmware.hex
-make web    # genera web/juego.wasm para la beta
+make        # firmware.hex
+make web    # la beta
 ```
 
 ## 5. Pruebas
 
-- Compila con `riscv64-unknown-elf-gcc -march=rv32i`: unos 7,6 KB de programa y 12,8 KB de RAM en total (de 32 KB), sin multiplicación ni división por software (el `× 4` del empuje es `daño << 2`).
-- Prueba de todo el recorrido con la beta: inicio → pelea → mando quieto (no golpea) → golpe contra el escudo (daño en 0 %) → 1 s de movimiento (4 golpes) → fin → revancha → fin → mantener 2 s → inicio.
-- Escenario: los dos luchadores suben a las plataformas de los lados con un salto y bajan con el joystick abajo. Un luchador que sale caminando por el borde de la isla vuelve con el doble salto si salta en el primer tercio de segundo.
-- **Beta:** abrir `web/pelea-beta.html` en el navegador. Usa los mismos `juego.c`, `controles.c` y `pantalla.c`; la página hace de los dos mandos y envía las mismas tramas de 8 bytes.
-  - J1: `A` `D` correr, `W` saltar (doble), `S` bajar de una plataforma, `G` mover el mando (golpe, mientras se mantiene), `F` botón (escudo).
-  - J2: `←` `→` correr, `↑` saltar (doble), `↓` bajar de una plataforma, `L` mover el mando, `K` botón (escudo).
+- El programa compila con `riscv64-unknown-elf-gcc -march=rv32i`. Ocupa unos 7,6 KB y no usa multiplicación ni división.
+- Probamos el juego completo en la beta: inicio, pelea, escudo, golpes, caídas, ganador, revancha y volver al inicio.
+- Comprobamos que los dos luchadores alcanzan las plataformas y que alguien que se sale de la isla puede volver con el doble salto.
+- También corrimos `firmware.hex` en una simulación del procesador del curso (`femtorv32_quark.v`, con Icarus Verilog), con modelos de los periféricos según el mapa de cada grupo: arranca, ve conectados los dos mandos, empieza con el botón del joystick, dibuja en la memoria de video del G4 y prende y apaga el tono del G5. Cada cuadro cabe en los 450 000 ciclos que hay a 27 MHz.
+- Para probar en la placa hicimos un programa aparte que prueba la pantalla, los mandos, los botones y el sonido sin PC: está en [`pruebas/`](pruebas/README.md).
+
+La beta está en `web/pelea-beta.html` y se abre en el navegador. Usa el mismo código del juego y la página hace de los dos mandos:
+
+- J1: `A` `D` correr, `W` saltar, `S` bajar, `G` mover el mando (golpe), `F` botón (escudo).
+- J2: `←` `→` correr, `↑` saltar, `↓` bajar, `L` mover el mando, `K` botón.
 
 ## 6. Implementación en placa
 
-**Pendiente.** Falta el mapa de memoria del SoC (G2) y los periféricos de pantalla (G4), UART (G1) y sonido (G5) integrados.
+Pendiente. El SoC (`projecto/consola`) ya tiene el procesador, la UART del PC, el multiplicador y el lugar del GPIO. Falta conectar la pantalla del G4 (`0x0044`), el sonido del G5 (`0x0043`) y el periférico de mandos del G5 (`0x0047`). Cuando estén, primero cargamos el programa de [`pruebas/`](pruebas/README.md) y después el juego.
 
-## Preguntas abiertas
 
-- [ ] **G2:** direcciones base de la UART, la pantalla, el sonido y el botón de inicio; frecuencia del reloj del SoC (el firmware asume 50 MHz, como el G4).
-- [ ] **G1:** ¿una sola UART recibe las tramas de los dos mandos? ¿Se puede subir a 57 600 baudios?
-- [ ] **G3:** ¿el bit de movimiento (1 moviéndose, 0 quieto) va en el byte 6 de la trama? ¿Cuánto dura en 1 un movimiento normal?
-- [ ] **G4:** ¿se puede leer `FRAME` para sincronizar y escribir los 4 096 píxeles seguidos con `PIXEL_DATA`?
-- [ ] **G5:** ¿el joystick llega dentro de la trama de 8 bytes o como registros propios? ¿Qué suena con cada código de efecto?
-
-## Registro de avances y aportes
-
-| Fecha | Integrante | Descripción del aporte | Estado |
-|---|---|---|---|
-| 2026-11-10 | Juan Esteban Salazar Cabra | README del G6 y diagrama de flujo | Hecho |
-| 2026-11-10 | Juan Diego Vega Ramírez | Lógica del juego (reglas Smash en C), recepción de la trama y bucle principal | Hecho |
-| 2026-11-10 | Andrés Camilo Bermúdez Molina | Dibujo de la pantalla, registros de hardware y beta web | Hecho |
-| 2026-11-11 | Juan Diego Vega Ramírez | Golpe con la señal de movimiento del G3 (1 = golpe), escudo con el botón, pantalla de inicio y revancha | Hecho |
-| 2026-11-11 | Andrés Camilo Bermúdez Molina | Dibujo del escudo, pantallas de inicio y fin; beta actualizada | Hecho |
-| 2026-11-11 | Juan Esteban Salazar Cabra | README y diagrama de flujo con el escudo y la revancha | Hecho |
-| 2026-11-19 | Juan Diego Vega Ramírez | Isla más grande, tres plataformas, caída más lenta, empuje según el daño y límites fuera de la pantalla; archivos del juego movidos a `firmware/` | Hecho |
-| 2026-11-19 | Andrés Camilo Bermúdez Molina | Dibujos del robot y el caballero, plataformas y cuadrito de quien está fuera de la pantalla; beta final y `.gitignore` | Hecho |
-| 2026-11-19 | Juan Esteban Salazar Cabra | README final y diagramas de flujo del juego y de cada luchador (ISO 5807) | Hecho |
