@@ -1,4 +1,4 @@
-# Desarrollo de los módulos – IMU BMI160 (Grupo 3)
+# Desarrollo de los módulos – IMU BMI160
 
 ## Índice
 - [top.v](#topv)
@@ -45,6 +45,7 @@ máquina de estados.
 
 
 ### Diagrama de flujo / FSM
+![Diagrama de flujo Módulo SPI](img/caja_negra_top.png)
 
 ### Datapath
 
