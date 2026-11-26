@@ -62,40 +62,50 @@ Para asegurarme de que el proyecto sintetice sin quedarse sin memoria interna, h
 
 ## 2. Arquitectura del Sistema y Mapa de Memoria MMIO
 
+Para que mi subsistema de memorias encaje sin conflictos con el video, el audio, los controles y el código del juego, primero tuve que definir las reglas de integración con los demás subgrupos y estructurar un mapa de direcciones único para todo el SoC.
+
 ### 2.1 Acuerdos de Integración entre Subgrupos
 
-Para que todos los módulos del proyecto encajen sin problemas de sincronización ni direcciones cruzadas, se establecieron los siguientes acuerdos:
+Antes de escribir código en Verilog, acordé con el resto del equipo cinco reglas base para evitar problemas al unir los módulos en la FPGA:
 
-- **Reloj maestro único ($27\text{ MHz}$):** Todo el SoC dentro de la FPGA corre de forma síncrona con el oscilador base de $27\text{ MHz}$ ($T_{\text{clk}} \approx 37.04\text{ ns}$), evitando cruces de dominios de reloj (CDC) entre el CPU, las memorias y los periféricos.
-- **Bus estándar del curso:** Todos los periféricos usan la interfaz síncrona acordada (`clk`, `rst`, `cs`, `addr`, `rd`, `wr`, `d_in`, `d_out`).
-- **Alineación con G4 (Pantalla HUB75):** El framebuffer se organiza en **2 bancos de $2048 \times 3$ bits** (RGB de $3$ bits = $8$ colores, $1.5\text{ KB}$ en total) y se sincroniza con la bandera **`FRAME`** del registro `hub75_csr`. Este framebuffer ya no es instanciado por G2 en `0x2000_0000`, sino que reside internamente dentro del periférico HUB75 de G4 en la región `0x0044` (dirección `0x0044_4000`).
-- **Alineación con G1, G3 y G5 (Controles y Audio):** Los datos del mando inalámbrico (Joystick analógico + IMU `BMI160` por SPI en la FPGA del mando) llegan por UART $\rightarrow$ Bluetooth (ESP32) hasta el receptor UART de la consola, y su estado procesado para los dos jugadores se almacena en la zona reservada de $6$ registros de la RAM de G2 (direcciones `42` a `47`). El audio se procesa mediante el protocolo I2S hacia un módulo DAC `MAX98357A`.
-- **Recursos de juego (G6):** Las memorias guardan activos genéricos para juegos arcade retro simples (*sprites* 2D, mapas, fuentes y puntajes máximos).
+- **Reloj maestro único ($27\text{ MHz}$):** Todo el SoC corre con el mismo oscilador base de $27\text{ MHz}$ ($T_{\text{clk}} \approx 37.04\text{ ns}$). Elegimos trabajar en un solo dominio de reloj porque, si el procesador y los periféricos corrieran a frecuencias distintas, tendríamos que diseñar circuitos de cruce de dominios de reloj (*Clock Domain Crossing* o CDC) y FIFOs asíncronas para evitar metaestabilidad. Con un solo reloj, cualquier lectura o escritura entre módulos queda sincronizada en el mismo flanco.
+- **Bus estándar del curso:** Todos los periféricos implementan exactamente la misma interfaz síncrona (`clk`, `rst`, `cs`, `addr`, `rd`, `wr`, `d_in`, `d_out`). Así puedo conectar mi controlador Flash SPI al decodificador principal del FemtoRV32 de la misma forma que G3, G4 o G5 conectan los suyos.
+- **Alineación con G4 (Pantalla HUB75):** La memoria de video se organiza en **2 bancos de $2048 \times 3$ bits** (RGB de $3$ bits = $8$ colores, $1.5\text{ KB}$ en total) y se sincroniza con la bandera **`FRAME`** del registro `hub75_csr` para evitar que el juego dibuje un cuadro nuevo a mitad de un barrido (*tearing*). Como mencioné en la sección anterior, acordé con G4 que esta memoria viva dentro de su propio periférico (`0x0044_4000`) en lugar de duplicarla desde G2 en `0x2000_0000`.
+- **Alineación con G1, G3 y G5 (Controles y Audio):** Los datos del mando inalámbrico (Joystick analógico + IMU `BMI160` leído por SPI en la FPGA del mando) viajan por UART hacia un puente Bluetooth (ESP32) y llegan al receptor UART de la consola (`0x0042_0000`). Una vez decodificados, su estado para los dos jugadores se guarda en los $6$ registros que reservé en la RAM principal de G2 (direcciones `42` a `47`). Por su parte, el audio se genera por hardware mediante el protocolo I2S hacia el DAC `MAX98357A`.
+- **Recursos de juego (G6):** El almacenamiento está pensado para activos genéricos de juegos arcade retro (*sprites* 2D, mapas de nivel, fuentes y puntajes máximos), de modo que el hardware de memoria no dependa de un solo juego específico.
 
 ### 2.2 Mapa de Memoria Unificado del SoC (FemtoRV32)
 
-Los periféricos se seleccionan mediante los bits superiores de la dirección (`mem_addr[31:16]`), permitiendo un mapeo limpio del `chip_select`.
+En una arquitectura con **E/S mapeada en memoria (MMIO)**, el procesador no necesita instrucciones especiales para hablar con la Flash, el audio o la pantalla; simplemente lee y escribe direcciones de memoria como si fueran variables en RAM.
+
+Para que la decodificación de direcciones consuma la menor cantidad posible de lógica (LUTs) en la FPGA, seleccionamos cada periférico mirando únicamente los $16$ bits superiores de la dirección (`mem_addr[31:16]`). Esto divide el espacio en bloques limpios de $64\text{ KB}$: al decodificador le basta comparar un prefijo fijo (por ejemplo, `0x0045` para mi controlador SPI) para activar la señal `cs` (*chip select*) correspondiente.
 
 | Rango de Direcciones | Tamaño | Subgrupo | Periférico / Región | Descripción de Acceso |
 | :--- | :---: | :---: | :--- | :--- |
 | `0x0000_0000` – `0x0000_7FFF` | $32\text{ KB}$ | **G2 / G6** | `BRAM_PROG_DATA` | Memoria principal de instrucciones y datos del FemtoRV32 (`.text`, `.data`, `.bss`, *stack*) y zona reservada de $6$ registros para los dos controles (direcciones `42`–`47`). |
 | `0x0042_0000` – `0x0042_000C` | $16\text{ B}$ | **G1 / G3** | `UART_INPUT_RX` | Receptor de tramas del mando inalámbrico (ejes del joystick, pulsadores y lecturas del `BMI160`). |
 | `0x0043_0000` – `0x0043_000C` | $16\text{ B}$ | **G5** | `AUDIO_I2S_CTRL` | Registros `FREQ`, `VOL` y `CONTROL` para el generador de audio I2S (`MAX98357A`). |
-| `0x0044_0000` – `0x0044_4FFF` | $20\text{ B}$ (CSR) + $1.5\text{ KB}$ (FB) | **G4** | `HUB75_CTRL` | Registros de control y estado (`0x0044_0000`, incluye bandera `FRAME`) y framebuffer interno (`0x0044_4000`, $4,096$ píxeles en 2 bancos de $2048 \times 3$ bits). |
-| `0x0045_0000` – `0x0045_000C` | $16\text{ B}$ | **G2** | `SPI_FLASH_CTRL` | Registros MMIO del controlador Flash SPI `W25Q64JV` (`CTRL_STAT`, `CMD_ADDR`, `TX_DATA`, `RX_DATA`). |
+| `0x0044_0000` – `0x0044_4FFF` | $20\text{ B}$ (CSR) + $1.5\text{ KB}$ (FB) | **G4** | `HUB75_CTRL` | Registros de control y estado (`0x0044_0000`, incluye bandera `FRAME`) y memoria de video interna (`0x0044_4000`, $4,096$ píxeles en 2 bancos de $2048 \times 3$ bits). |
+| `0x0045_0000` – `0x0045_000C` | $16\text{ B}$ | **G2** | `SPI_FLASH_CTRL` | Registros MMIO de mi controlador Flash SPI `W25Q64JV` (`CTRL_STAT`, `CMD_ADDR`, `TX_DATA`, `RX_DATA`). |
+
+**¿Por qué los periféricos ocupan $16\text{ B}$ (`0x00` a `0x0C`)?**
+El FemtoRV32 es un procesador de $32$ bits, por lo que sus accesos nativos están alineados a palabras de $4$ bytes. Al asignar $16\text{ B}$ por periférico, dispongo exactamente de $4$ registros de $32$ bits (`0x00`, `0x04`, `0x08` y `0x0C`), suficientes para separar control/estado, comandos/direcciones y datos de transmisión/recepción sin desperdiciar lógica en decodificadores internos grandes.
 
 ### 2.3 Flujo Completo del Envío de Datos al Juego
 
-En el siguiente diagrama se muestra cómo viajan los datos desde la memoria Flash hasta el panel LED, separando lo que corre en hardware (Verilog) y lo que ejecuta el FemtoRV32 en C:
+En el siguiente diagrama muestro cómo se mueven los datos desde la memoria Flash hasta el panel LED, separando qué tareas corren en hardware (Verilog) y cuáles se ejecutan por software (C en el FemtoRV32):
 
 ![Flujo Completo del Envío de Datos al Juego](img/flujo_datos_g2.drawio.svg)
 
 | Tarea del Sistema | Dominio | Disparo / Sincronización | Flujo de Entrada $\rightarrow$ Salida |
 | :--- | :---: | :--- | :--- |
-| **Almacenamiento SPI (`Storage`)** | **HW (HDL — G2)** | Escritura en `SPI_CTRL_STAT.start` (`0x0045_0000`) | Flash `W25Q64JV` (`MISO`) $\rightarrow$ Registro `SPI_RX_DATA` hacia el CPU. |
+| **Almacenamiento SPI (`Storage`)** | **HW (HDL - G2)** | Escritura en `SPI_CTRL_STAT.start` (`0x0045_0000`) | Flash `W25Q64JV` (`MISO`) $\rightarrow$ Registro `SPI_RX_DATA` hacia el CPU. |
 | **Recepción de Controles (`Input`)** | **HW + SW (G1/G3/G2)** | Trama UART recibida | Mando inalámbrico (Joystick + `BMI160`) $\rightarrow$ `UART_INPUT_RX` (`0x0042_0000`) $\rightarrow$ Registros de control en RAM (`42`–`47`). |
-| **Lógica de Juego (`Game Logic`)** | **SW (C — G6)** | Bucle principal + bandera `FRAME` | Estado de controles y *sprites* $\rightarrow$ Actualización de coordenadas, colisiones y escritura de píxeles en `0x0044_4000`. |
-| **Barrido de Video (`Video`)** | **HW (HDL — G4)** | Continuo a $27\text{ MHz}$ ($T_{\text{fila}} = 46.12~\mu\text{s}$) | Lectura síncrona Puerto B de BSRAM interna de G4 ($2048 \times 3$) $\rightarrow$ $14$ líneas paralelas HUB75 ($\approx 678\text{ Hz}$). |
+| **Lógica de Juego (`Game Logic`)** | **SW (C - G6)** | Bucle principal + bandera `FRAME` | Estado de controles y *sprites* $\rightarrow$ Actualización de coordenadas, colisiones y escritura de píxeles en `0x0044_4000`. |
+| **Barrido de Video (`Video`)** | **HW (HDL - G4)** | Continuo a $27\text{ MHz}$ ($T_{\text{fila}} = 46.12~\mu\text{s}$) | Lectura síncrona Puerto B de BSRAM interna de G4 ($2048 \times 3$) $\rightarrow$ $14$ líneas paralelas HUB75 ($\approx 678\text{ Hz}$). |
+
+**¿Por qué dividir el sistema así entre hardware y software?**
+Las tareas con tiempos estrictos y repetitivos —como generar el reloj SPI a $3.375\text{ MHz}$ o refrescar las $64 \times 64$ luces del panel HUB75 cientos de veces por segundo— deben ir en **hardware dedicado**. Si el FemtoRV32 intentara hacer ese barrido por software, quedaría bloqueado el $100\%$ del tiempo y no podría ejecutar el juego. Al delegar la transmisión SPI y el refresco de pantalla a bloques en Verilog, el procesador queda libre para dedicarse solo a la lógica del juego en C: leer controles, calcular colisiones, pedir los gráficos necesarios a la Flash y actualizar los píxeles cuando se activa la bandera `FRAME`.
 
 ---
 
