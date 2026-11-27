@@ -14,6 +14,7 @@ module empaquetador #(
     parameter [3:0] PER_X     = 4'42,
     parameter [3:0] PER_Y     = 4'43,
     parameter [3:0] PER_PUNCH = 4'44,
+    //parameter [3:0] PER_SHIELD 4'44,
     parameter       SOLO_CAMBIOS = 0
 )(
     input  wire       clk,
@@ -23,6 +24,7 @@ module empaquetador #(
     input  wire [7:0] x,
     input  wire [7:0] y,
     input  wire       punch,
+    //input  wire       shield,
     // Hacia la UART
     output reg  [7:0] tx_data,
     output reg        tx_start,
@@ -34,14 +36,20 @@ module empaquetador #(
     reg [2:0]  state;
     reg [1:0]  idx;                   // 0 = X, 1 = Y, 2 = Punch
     reg [7:0]  val_l;                 // valor congelado para el paquete en curso
-    reg [23:0] last;                  // último valor enviado de cada periférico
-    reg [2:0]  pend;                  // pendiente de primer envío tras reset
+    reg [31:0] last;                  // último valor enviado de cada periférico
+    reg [3:0]  pend;                  // pendiente de primer envío tras reset
 
+    // [SHIELD 4/6] con shield, reemplazar cur y per por las versiones comentadas:
     wire [7:0] cur = (idx == 2'd0) ? x :
                      (idx == 2'd1) ? y : {7'b0, punch};
     wire [3:0] per = (idx == 2'd0) ? PER_X :
                      (idx == 2'd1) ? PER_Y : PER_PUNCH;
-
+    // wire [7:0] cur = (idx == 2'd0) ? x :
+    //                  (idx == 2'd1) ? y :
+    //                  (idx == 2'd2) ? {7'b0, punch} : {7'b0, shield};
+    // wire [3:0] per = (idx == 2'd0) ? PER_X :
+    //                  (idx == 2'd1) ? PER_Y :
+    //                  (idx == 2'd2) ? PER_PUNCH : PER_SHIELD;
     wire cambio  = (cur != last[idx*8 +: 8]) | pend[idx];
     wire enviar  = (SOLO_CAMBIOS == 0) | cambio;
     wire [1:0] idx_sig = (idx == 2'd2) ? 2'd0 : idx + 1'b1;
