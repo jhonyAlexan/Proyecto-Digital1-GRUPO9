@@ -1,0 +1,12 @@
+flowchart LR
+  J1["Mando J1<br/>joystick + botón + golpe G3"] --> E1["ESP32 mando J1<br/>arma trama de 8 bytes"]
+  J2["Mando J2"] --> E2["ESP32 mando J2"]
+  E1 -. "inalámbrico (ESP-NOW)" .-> EC["ESP32 consola<br/>revisa checksum y reenvía"]
+  E2 -. "inalámbrico" .-> EC
+  EC -- "UART 115200 8N1<br/>GPIO17 → pin FPGA (por acordar)" --> P
+  subgraph SOC["SoC de la consola (Tang Nano 9K)"]
+    P["peripheral_mandos<br/>0x0047_xxxx"] -- "d_out" --> CSEL["chip_select<br/>mux de lectura"] -- "mem_rdata" --> CPU["FemtoRV32"]
+    CPU -- "mem_addr, mem_rstrb, mem_wmask" --> CSEL
+    CSEL -- "cs[7]" --> P
+  end
+  CPU --> G6["Juego G6<br/>hardware.h lee 0x0047_0000"]

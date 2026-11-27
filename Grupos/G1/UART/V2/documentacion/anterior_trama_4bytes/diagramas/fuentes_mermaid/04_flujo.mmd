@@ -1,0 +1,23 @@
+flowchart TD
+  A([Inicio / reset]) --> B["n_bytes = 0<br/>tmo = 0"]
+  B --> C{"¿uart_rx = 0?<br/>(flanco de start)"}
+  C -- no --> C
+  C -- sí --> D["Esperar medio bit<br/>(117 ciclos)"]
+  D --> E{"¿rx_in sigue en 0?"}
+  E -- "no (glitch)" --> C
+  E -- sí --> F["i = 0"]
+  F --> G["Esperar 1 bit (234 ciclos)<br/>muestrear rx_in<br/>rx_byte = {rx_in, rx_byte[7:1]}"]
+  G --> H{"¿i = 7?"}
+  H -- no --> I["i = i + 1"] --> G
+  H -- sí --> K["Esperar 1 bit<br/>muestrear stop"]
+  K --> L{"¿stop = 1?"}
+  L -- "no (error de trama)" --> B
+  L -- sí --> M["sr = {sr[23:0], rx_byte}<br/>n_bytes = n_bytes + 1<br/>tmo = 0"]
+  M --> N{"¿n_bytes = 4?"}
+  N -- no --> O{"¿llega otro start<br/>antes de TIMEOUT?"}
+  O -- sí --> D
+  O -- "no (trama cortada)" --> B
+  N -- sí --> P{"¿sr[31:29] = 000?"}
+  P -- no --> B
+  P -- sí --> Q["id = sr[3:0]<br/>x = sr[15:4]<br/>y = sr[27:16]<br/>ataque = sr[28]<br/>valido = 1 (1 ciclo)"]
+  Q --> B

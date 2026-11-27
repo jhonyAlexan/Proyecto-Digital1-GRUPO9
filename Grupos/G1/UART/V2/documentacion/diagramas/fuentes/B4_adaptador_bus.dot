@@ -1,0 +1,30 @@
+digraph B4 {
+  rankdir=LR; newrank=true; fontname="Helvetica"; label="B4 · Adaptador de bus: FemtoRV32 → chip_select → perip_mandos → mem_rdata"; labelloc=t; fontsize=14;
+  node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#eef3fb", color="#1f5fbf"]; edge [fontname="Helvetica", fontsize=9, arrowsize=0.7];
+  cpu [label="FemtoRV32\n(CPU)", fillcolor="#fdecea", color="#c0392b"];
+  subgraph cluster_soc { label="SOC.v"; style=dashed; color="#b26b00";
+    csel [label="chip_select\nmem_addr[31:16] = 0x0047 → cs[7]", fillcolor="#fff4d6", color="#b26b00"];
+    rdmux [label="mux de lectura\ncase(cs): chip7_dout", shape=invtrapezium, style=filled, fillcolor="#fff4d6", color="#b26b00"];
+    glue [label="rd = mem_rstrb\nwr = |mem_wmask", fillcolor="#fff4d6", color="#b26b00"];
+  }
+  subgraph cluster_p { label="perip_mandos.v (adaptador)"; style=dashed; color="#1f5fbf";
+    dec [label="decodificador local\naddr[3:0]: 0x0 | 0x4 | 0x8 | otro", shape=trapezium, style=filled];
+    mux [label="mux 4:1\nJOY1 | JOY2 | STATUS | 0", shape=invtrapezium, style=filled];
+    reg [label="registro d_out[31:0]\ncarga si cs & rd"];
+    regs [label="registros del core\np1_*, p2_*, STATUS"];
+  }
+  core [label="core\nuart_8n1 RX + desempaquetador"];
+  pin [label="uart_rx (pin)", shape=oval, fillcolor="#fff4d6", color="#b26b00"];
+  cpu -> csel [label="mem_addr[31:0]"];
+  cpu -> glue [label="mem_rstrb, mem_wmask[3:0]"];
+  cpu -> dec [label="mem_addr[3:0]"];
+  csel -> reg [label="cs[7]"];
+  glue -> reg [label="rd"];
+  glue -> reg [label="wr (ignorado)", style=dashed];
+  cpu -> reg [label="mem_wdata → d_in (ignorado)", style=dashed];
+  dec -> mux [label="sel"]; regs -> mux; mux -> reg;
+  pin -> core -> regs;
+  reg -> rdmux [label="chip7_dout = d_out"];
+  csel -> rdmux [label="cs[7:0]"];
+  rdmux -> cpu [label="mem_rdata[31:0]", constraint=false];
+}

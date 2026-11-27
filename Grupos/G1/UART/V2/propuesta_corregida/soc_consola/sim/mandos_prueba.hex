@@ -1,0 +1,9 @@
+// Programa de prueba (RV32I a mano) para tb_soc_mandos.v
+004700b7  // 0x000: lui  x1, 0x00470      # x1 = 0x0047_0000 (MANDOS_BASE)
+0000a103  // 0x004: lw   x2, 0(x1)         # JOY1_DATA
+0040a183  // 0x008: lw   x3, 4(x1)         # JOY2_DATA
+0080a203  // 0x00c: lw   x4, 8(x1)         # STATUS
+40202023  // 0x010: sw   x2, 0x400(x0)     # RAM[0x400] = JOY1
+40302223  // 0x014: sw   x3, 0x404(x0)     # RAM[0x404] = JOY2
+40402423  // 0x018: sw   x4, 0x408(x0)     # RAM[0x408] = STATUS
+fe9ff06f  // 0x01c: jal  x0, -24           # volver a 0x004

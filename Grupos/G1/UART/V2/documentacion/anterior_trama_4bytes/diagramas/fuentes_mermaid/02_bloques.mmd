@@ -1,0 +1,17 @@
+flowchart LR
+  subgraph CTRL_SYS["Control del jugador"]
+    J["Joystick<br/>+ botón"] --> E1["ESP32 #1<br/>ADC 12 bits<br/>arma trama 32 bits"]
+  end
+  E1 -- "UART TX GPIO17<br/>115200 8N1, 4 bytes" --> F1
+  E1 -. "Bluetooth SPP<br/>texto ID:..,X:..,Y:..,ATQ:.." .-> E2["ESP32 #2<br/>reconstruye trama"]
+  E2 -- "UART TX GPIO17<br/>4 bytes" --> F2
+  subgraph F1["FPGA #1 (Tang Nano 9K)"]
+    direction LR
+    S1["Sincronizador<br/>2 FF"] --> B1["Receptor de byte<br/>uart_rx_dp + uart_rx_ctrl"] --> T1["Ensamblador de trama<br/>trama_dp + trama_ctrl"]
+  end
+  subgraph F2["FPGA #2 Consola (Tang Nano 9K)"]
+    direction LR
+    S2["Sincronizador"] --> B2["Receptor de byte"] --> T2["Ensamblador de trama"]
+  end
+  T1 --> L1["Lógica del juego<br/>(G6)"]
+  T2 --> L2["Lógica del juego / SoC<br/>(G2, G6)"]

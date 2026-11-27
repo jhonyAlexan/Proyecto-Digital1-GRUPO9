@@ -1,0 +1,33 @@
+[dumpfile] "tb_perip_mandos_filas.vcd"
+[timestart] 198000000
+@28
+tb_perip_mandos_filas.uart_rx
+tb_perip_mandos_filas.dut.u_uart.rx_in
+@24
+tb_perip_mandos_filas.dut.u_uart.r_state[2:0]
+tb_perip_mandos_filas.dut.u_uart.r_idx[2:0]
+@22
+tb_perip_mandos_filas.dut.u_uart.r_sh[7:0]
+@28
+tb_perip_mandos_filas.dut.rx_valid
+tb_perip_mandos_filas.dut.rx_frame_err
+@22
+tb_perip_mandos_filas.dut.rx_data[7:0]
+@24
+tb_perip_mandos_filas.dut.des.state[1:0]
+tb_perip_mandos_filas.dut.des.idx[2:0]
+@22
+tb_perip_mandos_filas.dut.des.xor_l[7:0]
+@28
+tb_perip_mandos_filas.dut.p1_nuevo
+tb_perip_mandos_filas.dut.p2_nuevo
+@22
+tb_perip_mandos_filas.dut.joy1_data[31:0]
+tb_perip_mandos_filas.dut.joy2_data[31:0]
+tb_perip_mandos_filas.dut.status[3:0]
+@28
+tb_perip_mandos_filas.cs
+tb_perip_mandos_filas.rd
+@22
+tb_perip_mandos_filas.addr[31:0]
+tb_perip_mandos_filas.d_out[31:0]

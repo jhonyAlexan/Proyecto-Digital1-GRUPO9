@@ -1,0 +1,22 @@
+flowchart TD
+  classDef st fill:#eef3fb,stroke:#1f5fbf,stroke-width:2px
+  classDef dec fill:#fff7e6,stroke:#b26b00
+  classDef mo fill:#e9f7ef,stroke:#1e8449,stroke-dasharray: 4 2
+  IDLE["<b>IDLE</b><br/>cnt ← 0 ; idx ← 0"]:::st --> d1{"rx_in"}:::dec
+  d1 -- 1 --> IDLE
+  d1 -- 0 --> START["<b>START</b><br/>cnt ← cnt + 1"]:::st
+  START --> d2{"medio_bit"}:::dec
+  d2 -- 0 --> START
+  d2 -- 1 --> c2(["cnt ← 0"]):::mo --> d3{"rx_in"}:::dec
+  d3 -- 1 --> IDLE
+  d3 -- 0 --> DATA["<b>DATA</b><br/>cnt ← cnt + 1"]:::st
+  DATA --> d4{"fin_bit"}:::dec
+  d4 -- 0 --> DATA
+  d4 -- 1 --> c4(["cnt ← 0<br/>rx_byte ← {rx_in, rx_byte[7:1]}<br/>idx ← idx + 1"]):::mo --> d5{"ultimo_bit"}:::dec
+  d5 -- 0 --> DATA
+  d5 -- 1 --> STOP["<b>STOP</b><br/>cnt ← cnt + 1"]:::st
+  STOP --> d6{"fin_bit"}:::dec
+  d6 -- 0 --> STOP
+  d6 -- 1 --> d7{"rx_in"}:::dec
+  d7 -- 1 --> c7(["cnt ← 0<br/>byte_listo = 1"]):::mo --> IDLE
+  d7 -- 0 --> c8(["cnt ← 0<br/>error_trama = 1"]):::mo --> IDLE

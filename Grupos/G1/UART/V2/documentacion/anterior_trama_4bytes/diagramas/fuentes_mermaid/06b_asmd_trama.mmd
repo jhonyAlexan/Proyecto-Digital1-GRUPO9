@@ -1,0 +1,16 @@
+flowchart TD
+  classDef st fill:#eef3fb,stroke:#1f5fbf,stroke-width:2px
+  classDef dec fill:#fff7e6,stroke:#b26b00
+  classDef mo fill:#e9f7ef,stroke:#1e8449,stroke-dasharray: 4 2
+  B0["<b>B0</b> (espera byte 3, MSB)<br/>tmo ← 0"]:::st --> e0{"byte_listo"}:::dec
+  e0 -- 0 --> B0
+  e0 -- 1 --> c0(["sr ← {sr[23:0], rx_byte}"]):::mo --> B1
+  B1["<b>B1 / B2 / B3</b><br/>(espera byte 2, 1, 0)<br/>tmo ← tmo + 1"]:::st --> e1{"error_trama<br/>o timeout"}:::dec
+  e1 -- 1 --> B0
+  e1 -- 0 --> e2{"byte_listo"}:::dec
+  e2 -- 0 --> B1
+  e2 -- 1 --> c1(["sr ← {sr[23:0], rx_byte}<br/>tmo ← 0"]):::mo --> e3{"¿estado = B3?"}:::dec
+  e3 -- "no: siguiente Bk" --> B1
+  e3 -- sí --> PUB["<b>PUB</b>"]:::st --> e4{"reservado_ok<br/>sr[31:29] = 000"}:::dec
+  e4 -- 0 --> B0
+  e4 -- 1 --> c4(["id ← sr[3:0] ; x ← sr[15:4]<br/>y ← sr[27:16] ; ataque ← sr[28]<br/>valido ← 1"]):::mo --> B0
