@@ -29,7 +29,7 @@ El módulo instancia tres bloques: `spi_master` (comunicación con la IMU),
 máquina de estados.
 
 ### Caja negra
-![Caja negra del módulo top](img/caja_negra_top.png)
+![Caja negra del módulo top](IMU_Probado_FPGA/img/caja_negra_top.png)
 
 | Señal | Dirección | Ancho | Pin | Descripción |
 | :--- | :--- | :---: | :---: | :--- |
@@ -45,7 +45,7 @@ máquina de estados.
 
 
 ### Diagrama de flujo / FSM
-![Diagrama de flujo Módulo SPI](img/diagrama_flujo_spi.png)
+![Diagrama de flujo Módulo SPI](IMU_Probado_FPGA/img/diagrama_flujo_spi.png)
 
 ### Datapath
 
@@ -79,7 +79,7 @@ Funcionamiento:
 Una transacción completa dura 16 × 28 = 448 ciclos de reloj, unos 16,6 µs.
 
 ### Caja negra
-![Caja negra del módulo spi_master](img/caja_negra_spi.png)
+![Caja negra del módulo spi_master](IMU_Probado_FPGA/img/caja_negra_spi.png)
 
 | Señal | Dirección | Ancho | Descripción |
 | :--- | :--- | :---: | :--- |
@@ -133,7 +133,7 @@ solo golpe físico genera un único pulso, aunque la energía se mantenga alta
 varias muestras seguidas.
 
 ### Caja negra
-![Caja negra del módulo detector_golpe](img/caja_negra_detector.png)
+![Caja negra del módulo detector_golpe](IMU_Probado_FPGA/img/caja_negra_detector.png)
 
 | Señal | Dirección | Ancho | Descripción |
 | :--- | :--- | :---: | :--- |
@@ -193,7 +193,7 @@ El módulo no tiene registros de escritura. Mientras no haya una lectura,
 - `rd` es el pulso de lectura del procesador.
 
 ### Caja negra
-![Caja negra del módulo periferico_imu_mmio](img/caja_negra_periferico.png)
+![Caja negra del módulo periferico_imu_mmio](IMU_Probado_FPGA/img/caja_negra_periferico.png)
 
 | Señal | Dirección | Ancho | Descripción |
 | :--- | :--- | :---: | :--- |
