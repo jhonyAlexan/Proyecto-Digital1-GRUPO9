@@ -23,7 +23,7 @@ Aqui puede ver el datapath del archivo:
 
 <img width="5928" height="2280" alt="image" src="https://github.com/user-attachments/assets/343fd6a3-5fd9-4faf-8021-0900584b6c37" />
 ## Tabla de señales
-<img width="1552" height="408" alt="image" src="https://github.com/jhonyAlexan/Proyecto-Digital1-GRUPO9/blob/main/Grupos/G1/UART/Propuesta/Dise%C3%B1o/Diagrama%20de%20bloques%20y%20tabla%20de%20se%C3%B1ales%20V2.png" />
+<img width="1552" height="1552" alt="image" src="https://github.com/jhonyAlexan/Proyecto-Digital1-GRUPO9/blob/main/Grupos/G1/UART/Propuesta/Dise%C3%B1o/Diagrama%20de%20bloques%20y%20tabla%20de%20se%C3%B1ales%20V2.png" />
 
 
 
