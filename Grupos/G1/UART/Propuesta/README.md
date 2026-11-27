@@ -22,7 +22,7 @@ Estos módulos se conectan asi
 Aqui puede ver el datapath del archivo:
 
 <img width="5928" height="2280" alt="image" src="https://github.com/user-attachments/assets/343fd6a3-5fd9-4faf-8021-0900584b6c37" />
-
+## Tabla de señales
 
 ## UART
 Envía paqueteds de 8 bits y avisa cunado esta recibiendo, enviando o la información esta lista.
