@@ -57,7 +57,7 @@ Respuestas propuestas a las preguntas del #21:
 
 ## Pendientes (sin confirmar con el G4)
 
-- **Pin de la UART de los mandos en la Tang Nano 9K:** se usa el **33** porque el G3 ocupa del 25 al 29 y el G5 el 28, pero el G4 también usa el 33. Se cambia en una sola línea de cada `.cst` (`IO_LOC "uart_mandos" 33;` en `propuesta_corregida/soc_consola/boards/tangnano9k/tangnano9k.cst`, `IO_LOC "uart_rx" 33;` en `boards/tangnano9k/com.cst` y en `mandos_v1/placa/tangnano9k_g1.cst`), sin tocar el RTL.
+- **Pin de la UART de los mandos en la Tang Nano 9K:** se usa el **33** porque el G3 ocupa del 25 al 29 y el G5 el 28, pero el G4 también usa el 33. Se cambia en una sola línea de cada `.cst` (`IO_LOC "uart_mandos" 33;` en `propuesta_corregida/soc_consola/boards/tangnano9k/tangnano9k.cst`, `IO_LOC "uart_rx" 33;` en `boards/tangnano9k/com.cst` y `IO_LOC "uart_rx_mando" 33;` en `mandos_v1/placa/tangnano9k_g1.cst`), sin tocar el RTL.
 - **Reloj 27 MHz (Tang Nano) o 25 MHz (G4):** todo el RTL lo recibe como parámetro (`CLK_HZ` / `CLK_FREQ`, 27 MHz por defecto). El banco de `documentacion/sim` pasa en los dos casos (`make filas` y `make filas25`).
 
 ## Cómo probar
