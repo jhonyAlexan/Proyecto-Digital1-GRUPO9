@@ -1,7 +1,7 @@
 # Esto es un propuesta de sistema de comunicaciones
 ## Caja negra
 
-<img width="1552" height="408" alt="image" src="https://github.com/user-attachments/assets/5e1016f6-19c6-4187-ab39-5a44f1bde5ec" />
+<img width="1552" height="408" alt="image" src="https://github.com/jhonyAlexan/Proyecto-Digital1-GRUPO9/blob/main/Grupos/G1/UART/Propuesta/Dise%C3%B1o/diagrama_cajanegra2.0.png" />
 
 
 Esto consta de tres modulos
