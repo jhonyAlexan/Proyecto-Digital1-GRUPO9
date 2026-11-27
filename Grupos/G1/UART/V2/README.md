@@ -12,21 +12,6 @@ Esta carpeta reúne todo lo que el G1 ha trabajado para la comunicación de los 
 | [`documentacion/`](documentacion/) | Las etapas de diseño de la guía (A1–A9 de `uart.pdf` y B1–B8 de `uart-riscv.pdf`) para la trama de 8 bytes: caja negra, bloques, tiempos, flujo, ASMD, arquitectura, FSM, testbench, mapa de chip select, pines. Diagramas en `diagramas/` (con sus fuentes), RTL de referencia y bancos de prueba. La versión vieja de 4 bytes está en `anterior_trama_4bytes/`. | `docs_G1` |
 | `Makefile` | Corre todas las simulaciones de V2 de una vez. | nuevo |
 
-## Diagramas (etapas de diseño)
-
-Las imágenes están en [`documentacion/diagramas/`](documentacion/diagramas/) y el informe completo, con cada diagrama explicado, en [`documentacion/README.md`](documentacion/README.md).
-
-| Etapa | Diagrama |
-| --- | --- |
-| 1. Caja negra | ![](documentacion/diagramas/A1_caja_negra.png) |
-| 2. Sistema y bloques | ![](documentacion/diagramas/A2a_sistema.png) ![](documentacion/diagramas/A2b_bloques.png) |
-| 3. Tiempos | ![](documentacion/diagramas/03a_tiempos_byte_0x11.svg) ![](documentacion/diagramas/03b_tiempos_trama_J1.svg) |
-| 4. Flujo | ![](documentacion/diagramas/A4_flujo.png) |
-| 6. ASMD | ![](documentacion/diagramas/A6a_asmd_rx.png) ![](documentacion/diagramas/A6b_asmd_desempaquetador.png) |
-| 7. Arquitectura | ![](documentacion/diagramas/A7_arquitectura.png) |
-| 8. FSM | ![](documentacion/diagramas/A8a_fsm_rx.png) ![](documentacion/diagramas/A8b_fsm_desempaquetador.png) |
-| Bus del SoC | ![](documentacion/diagramas/B1_mapa_chip_select.png) ![](documentacion/diagramas/B4_adaptador_bus.png) |
-
 ## Issue #20: parámetros que no compilaban
 
 En `empaquetador.v` y `desempaquetador.v` los parámetros quedaron como `4'42`, `4'43` y `4'44`: les falta la base y `0x42` no cabe en 4 bits. Hay dos salidas, y V2 guarda las dos:
