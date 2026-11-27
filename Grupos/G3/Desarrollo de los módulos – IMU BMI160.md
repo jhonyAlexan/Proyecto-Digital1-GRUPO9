@@ -233,6 +233,77 @@ flowchart TD
 
 ### Datapath
 
+```mermaid
+flowchart LR
+  subgraph IN["Entradas"]
+    GX[/"gx 16b signed"/]
+    GY[/"gy 16b signed"/]
+    GZ[/"gz 16b signed"/]
+    AX[/"ax 16b signed"/]
+    AY[/"ay 16b signed"/]
+    AZ[/"az 16b signed"/]
+  end
+
+  subgraph GIRO["Giroscopio: magnitud"]
+    AGX["abs 16b"]
+    AGY["abs 16b"]
+    AGZ["abs 16b"]
+  end
+
+  subgraph ACC["Acelerómetro: cambio"]
+    PAX[("prev_ax 16b")]
+    PAY[("prev_ay 16b")]
+    PAZ[("prev_az 16b")]
+    DX["resta 17b"]
+    DY["resta 17b"]
+    DZ["resta 17b"]
+    ADX["abs 17b"]
+    ADY["abs 17b"]
+    ADZ["abs 17b"]
+  end
+
+  GX --> AGX
+  GY --> AGY
+  GZ --> AGZ
+  AX --> DX
+  AY --> DY
+  AZ --> DZ
+  PAX --> DX
+  PAY --> DY
+  PAZ --> DZ
+  DX --> ADX
+  DY --> ADY
+  DZ --> ADZ
+
+  AGX --> SUM["Sumador de 6 términos<br/>extendidos a 19b"]
+  AGY --> SUM
+  AGZ --> SUM
+  ADX --> SUM
+  ADY --> SUM
+  ADZ --> SUM
+
+  SUM --> EN["energia_mov 19b"]
+  EN --> OUT_E[/"energia_out 19b"/]
+  EN --> CMP{"energia_mov ><br/>UMBRAL_GOLPE"}
+  CMP -- "over_threshold" --> CTRL
+
+  AX -. "load_prev" .-> PAX
+  AY -. "load_prev" .-> PAY
+  AZ -. "load_prev" .-> PAZ
+
+  TMR[("timer 24b")] --> INC["+1"]
+  INC --> TMR
+  TMR --> C1{"== PULSO_ALTO_CLK"}
+  TMR --> C2{"== COOLDOWN_CLK"}
+  C1 -- "pulse_end" --> CTRL
+  C2 -- "cool_end" --> CTRL
+
+  SV[/"sample_valid"/] --> CTRL["CONTROL<br/>FSM st + golpe_out"]
+  CTRL -- "load_prev" --> PAX
+  CTRL -- "clear_timer, inc_timer" --> TMR
+  CTRL --> GOUT[/"golpe_out"/]
+```
+
 ### Observaciones
 
 ## periferico_imu_mmio.v
@@ -305,8 +376,5 @@ flowchart TD
     OutGolpe --> Inicio
     OutZero --> Inicio
 ```
-
-
-### Datapath
 
 ### Observaciones
