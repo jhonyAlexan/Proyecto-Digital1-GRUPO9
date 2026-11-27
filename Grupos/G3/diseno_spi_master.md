@@ -1,4 +1,4 @@
-# Diseño del `spi_master` y del periférico MMIO (G3 — IMU BMI160)
+# Diseño del `spi_master` y del periférico MMIO 
  
 Reloj `clk` = 27 MHz. SPI modo 0 (CPOL=0, CPHA=0), trama de 16 bits, reset asíncrono activo en bajo.
  
