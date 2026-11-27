@@ -14,7 +14,7 @@
 // y recibe las condiciones de un bit (last_col, lat_zone1, lat_zone2, last_cnt,
 // oe_on). Los nombres T1..T8 son las filas de la tabla de transferencias.
 //
-// Reloj: el de la consola (50 MHz en la Tang Primer 25K). rst: síncrono, activo
+// Reloj: el de la consola nano 9k a 25MHz y también se probó originalmente con 50 MHz en la Tang Primer 25K. rst: síncrono, activo
 // en alto; no borra el framebuffer.
 // =============================================================================
 module hub75_core #(
