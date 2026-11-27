@@ -1,0 +1,13 @@
+flowchart LR
+  classDef dp fill:#eef3fb,stroke:#1f5fbf
+  A(["addr[3:0]"]) --> D0{"= 0x0"}:::dp --> J1["sel JOY1_DATA"]
+  A --> D4{"= 0x4"}:::dp --> J2["sel JOY2_DATA"]
+  A --> D8{"= 0x8"}:::dp --> ST["sel STATUS"]
+  A --> DX{"otro<br/>(0xC, 0x1..0x3, ...)"}:::dp --> Z["sel 32'h0"]
+  J1 --> M["mux 4:1"]
+  J2 --> M
+  ST --> M
+  Z --> M
+  EN(["en = cs & rd"]) --> R
+  M --> R["registro d_out[31:0]<br/>(flanco de subida)"] --> O(["d_out"])
+  W(["wr, d_in, addr[31:4]"]) -.-> N["sin uso: registros de solo lectura"]

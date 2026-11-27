@@ -1,0 +1,11 @@
+flowchart LR
+  clk(["clk<br/>27 MHz"]) --> RX
+  rst(["rst_n<br/>activo en bajo"]) --> RX
+  uart(["uart_rx<br/>115200 8N1"]) --> RX
+  RX["<b>uart_rx_g1</b><br/>Receptor UART de trama<br/>de 32 bits (4 bytes)<br/><br/>CLKS_PER_BIT = 234<br/>TIMEOUT = 4680 ciclos"]
+  RX --> id(["id_fpga [3:0]"])
+  RX --> x(["direccion_x [11:0]"])
+  RX --> y(["direccion_y [11:0]"])
+  RX --> atk(["ataque"])
+  RX --> v(["valido<br/>pulso de 1 ciclo"])
+  style RX fill:#eef3fb,stroke:#1f5fbf,stroke-width:2px

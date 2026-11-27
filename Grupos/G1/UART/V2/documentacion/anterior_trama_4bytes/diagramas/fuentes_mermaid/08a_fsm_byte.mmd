@@ -1,0 +1,12 @@
+stateDiagram-v2
+  direction LR
+  [*] --> IDLE : rst_n = 0
+  IDLE --> IDLE : rx_in = 1
+  IDLE --> START : rx_in = 0
+  START --> START : !medio_bit
+  START --> IDLE : medio_bit & rx_in = 1 (glitch)
+  START --> DATA : medio_bit & rx_in = 0
+  DATA --> DATA : !fin_bit | !ultimo_bit
+  DATA --> STOP : fin_bit & ultimo_bit
+  STOP --> STOP : !fin_bit
+  STOP --> IDLE : fin_bit / byte_listo (rx_in=1) o error_trama (rx_in=0)

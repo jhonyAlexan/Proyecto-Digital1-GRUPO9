@@ -1,0 +1,39 @@
+flowchart LR
+  classDef ctl fill:#fdecea,stroke:#c0392b,stroke-width:2px
+  classDef dp fill:#eef3fb,stroke:#1f5fbf,stroke-width:2px
+  uart([uart_rx]) --> SY
+  subgraph DP1["uart_rx_dp (datapath de byte)"]
+    SY["Sincronizador<br/>rx_sync[1:0]"] --> RXI((rx_in))
+    CNT["Contador cnt[7:0]<br/>clr / +1"] --> CMP1["== 116 → medio_bit<br/>== 233 → fin_bit"]
+    IDX["Contador idx[2:0]<br/>clr / +1"] --> CMP2["== 7 → ultimo_bit"]
+    SR8["Reg. desplazamiento<br/>rx_byte[7:0]"]
+    RXI --> SR8
+  end
+  subgraph C1["uart_rx_ctrl (FSM 4 estados)"]
+    FSM1["IDLE / START / DATA / STOP"]
+  end
+  RXI --> FSM1
+  CMP1 --> FSM1
+  CMP2 --> FSM1
+  FSM1 -- "clr_cnt" --> CNT
+  FSM1 -- "clr_idx, desplazar" --> IDX
+  FSM1 -- "desplazar" --> SR8
+  subgraph DP2["trama_dp (datapath de trama)"]
+    SR32["Reg. desplazamiento<br/>sr[31:0]"] --> CMP3["sr[31:29] == 0<br/>→ reservado_ok"]
+    TMO["Contador tmo[12:0]<br/>== 4680 → timeout"]
+    OUT["Registros de salida<br/>id, x, y, ataque, valido"]
+    SR32 --> OUT
+  end
+  subgraph C2["trama_ctrl (FSM 5 estados)"]
+    FSM2["B0 / B1 / B2 / B3 / PUB"]
+  end
+  SR8 -- "rx_byte" --> SR32
+  FSM1 -- "byte_listo, error_trama" --> FSM2
+  CMP3 --> FSM2
+  TMO -- "timeout" --> FSM2
+  FSM2 -- "cargar" --> SR32
+  FSM2 -- "clr_tmo" --> TMO
+  FSM2 -- "publicar" --> OUT
+  OUT --> salida(["id_fpga, direccion_x,<br/>direccion_y, ataque, valido"])
+  class FSM1,FSM2 ctl
+  class SY,CNT,IDX,SR8,SR32,TMO,OUT,CMP1,CMP2,CMP3 dp

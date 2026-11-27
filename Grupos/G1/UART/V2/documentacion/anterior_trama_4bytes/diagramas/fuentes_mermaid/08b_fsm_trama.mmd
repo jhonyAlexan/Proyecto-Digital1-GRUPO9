@@ -1,0 +1,11 @@
+stateDiagram-v2
+  direction LR
+  [*] --> B0 : rst_n = 0
+  B0 --> B1 : byte_listo / cargar
+  B1 --> B2 : byte_listo / cargar
+  B2 --> B3 : byte_listo / cargar
+  B3 --> PUB : byte_listo / cargar
+  B1 --> B0 : error_trama | timeout
+  B2 --> B0 : error_trama | timeout
+  B3 --> B0 : error_trama | timeout
+  PUB --> B0 : publicar si reservado_ok

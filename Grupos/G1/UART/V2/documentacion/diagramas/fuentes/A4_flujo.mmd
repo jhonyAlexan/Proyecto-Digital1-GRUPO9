@@ -1,0 +1,28 @@
+flowchart TD
+  A([reset]) --> B0["JOY1, JOY2 y STATUS en 0"] --> B["buscar cabecera 0xAA<br/>(los registros conservan<br/>la última muestra)"]
+  B --> C{"¿línea en 0?<br/>(start)"}
+  C -- no --> C
+  C -- sí --> D["esperar medio bit (117 ciclos)"]
+  D --> E{"¿sigue en 0?"}
+  E -- "no: glitch" --> C
+  E -- sí --> F["8 veces: esperar 1 bit (234 ciclos)<br/>y desplazar rx_in (LSB primero)"]
+  F --> G["esperar 1 bit: leer stop"]
+  G --> H{"¿stop = 1?"}
+  H -- no --> H1["UART_ERROR = 1<br/>descartar trama<br/>esperar línea en 1"] --> B
+  H -- sí --> I{"¿estado de la trama?"}
+  I -- "buscando cabecera" --> I1{"¿byte = 0xAA?"}
+  I1 -- no --> C
+  I1 -- sí --> I2["n = 1 ; xor = 0"] --> C
+  I -- "bytes 1..6" --> K["guardar byte n en su latch<br/>xor = xor ^ byte ; n = n + 1"] --> C
+  I -- "byte 7" --> L{"¿byte = xor?"}
+  L -- no --> L1["CHECKSUM_ERROR = 1<br/>se conserva la muestra anterior"] --> B
+  L -- sí --> M{"¿jugador?"}
+  M -- 1 --> M1["copiar X, Y, shield, punch, seq a J1<br/>P1_VALID = 1"] --> B
+  M -- 2 --> M2["copiar a J2<br/>P2_VALID = 1"] --> B
+  M -- otro --> B
+  C -. "trama a medias y 1 ms sin bytes" .-> B
+  R(["El CPU lee en cualquier momento"]) --> R1{"addr[3:0]"}
+  R1 -- "0x0" --> R2["d_out = JOY1_DATA"]
+  R1 -- "0x4" --> R3["d_out = JOY2_DATA"]
+  R1 -- "0x8" --> R4["d_out = STATUS"]
+  R1 -- otro --> R5["d_out = 0"]

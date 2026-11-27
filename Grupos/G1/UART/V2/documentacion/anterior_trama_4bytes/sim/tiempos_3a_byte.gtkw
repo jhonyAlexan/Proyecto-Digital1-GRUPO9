@@ -1,0 +1,17 @@
+[dumpfile] "uart_rx_g1_TB.vcd"
+[timestart] 17000000
+@28
+uart_rx_g1_TB.uart_rx
+uart_rx_g1_TB.dut.rx_in
+@24
+uart_rx_g1_TB.dut.u_rx_ctrl.estado[1:0]
+@28
+uart_rx_g1_TB.dut.medio_bit
+uart_rx_g1_TB.dut.fin_bit
+uart_rx_g1_TB.dut.desplazar
+@24
+uart_rx_g1_TB.dut.u_rx_dp.idx[2:0]
+@22
+uart_rx_g1_TB.dut.rx_byte[7:0]
+@28
+uart_rx_g1_TB.dut.byte_listo

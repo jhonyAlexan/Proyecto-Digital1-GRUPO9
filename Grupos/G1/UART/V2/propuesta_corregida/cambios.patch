@@ -1,0 +1,1691 @@
+diff --git a/Grupos/G1/UART/Propuesta/Makefile b/Grupos/G1/UART/Propuesta/Makefile
+index 11e49e2..7bdf237 100644
+--- a/Grupos/G1/UART/Propuesta/Makefile
++++ b/Grupos/G1/UART/Propuesta/Makefile
+@@ -5,6 +5,7 @@
+ # Uso básico (escriba "make help" para ver todo):
+ #   make sim                         compila el programa y simula el SoC
+ #   make sim_ctrl                    simula el mando (lazo cerrado de la UART)
++#   make sim_mandos                  simula el periférico de mandos del SoC (0x0047)
+ #   make syn                         sintetiza el SoC para la Tang Nano 9K
+ #   make syn_ctrl                    sintetiza solo el mando para la Tang Nano 9K
+ #   make config                      configura la FPGA con el SoC
+@@ -54,6 +55,8 @@ RTL += $(filter-out $(RTL),$(wildcard rtl/perip_*.v))
+ # Mando UART (no se mezcla con el SoC; uart_8n1 evita chocar con el módulo "uart")
+ CTRL     := rtl/ctrl/empaquetador.v rtl/ctrl/uart_8n1.v rtl/ctrl/desempaquetador.v
+ CTRL_BIT := $(B)/ctrl.fs
++# Periférico de mandos para el SoC de la consola (0x0047_xxxx)
++MANDOS   := rtl/ctrl/uart_8n1.v rtl/ctrl/desempaquetador.v rtl/ctrl/perip_mandos.v
+ 
+ RAM_PALABRAS := 8192
+ 
+@@ -64,7 +67,7 @@ IV_RELAX := $(shell bash -c '$(RUN) $(IVERILOG) -gno-strict-declaration -E -o /d
+ CFLAGS := -march=rv32i -mabi=ilp32 -Os -g -ffreestanding -nostdlib \
+           -ffunction-sections -fdata-sections -Wall
+ 
+-.PHONY: help firmware sim sim_ctrl sim_com wave rtl syn syn_ctrl config config_ctrl config-flash terminal stats clean
++.PHONY: help firmware sim sim_ctrl sim_com sim_mandos wave rtl syn syn_ctrl config config_ctrl config-flash terminal stats clean
+ 
+ help:
+ 	@echo ""
+@@ -73,6 +76,7 @@ help:
+ 	@echo "  make sim ARGS=+vcd       Además guarda formas de onda; luego: make wave"
+ 	@echo "  make sim_ctrl            Simula el mando: empaquetador -> UART -> desempaquetador"
+ 	@echo "  make sim_com             Simula el top com.v (reset, UART, LEDs)"
++	@echo "  make sim_mandos          Simula el periférico de mandos (bus del SoC, 0x0047)"
+ 	@echo "  make wave                Abre las formas de onda en GTKWave"
+ 	@echo "  make rtl                 Diagrama RTL del SoC (build/SOC.svg)"
+ 	@echo "  make syn BOARD=...       Síntesis, place & route y bitstream (colorlight | tangnano9k)"
+@@ -130,6 +134,12 @@ sim_com:
+ 	$(RUN) $(IVERILOG) -g2012 -o $(B)/tb_com.vvp -s tb_com sim/tb_com.v boards/tangnano9k/com.v rtl/ctrl/uart_8n1.v rtl/ctrl/desempaquetador.v
+ 	$(RUN) $(VVP) -n $(B)/tb_com.vvp $(ARGS)
+ 
++# Periférico de mandos: lecturas por el bus del SoC, trama del G5 por uart_rx
++sim_mandos:
++	mkdir -p $(B)
++	$(RUN) $(IVERILOG) -g2012 -o $(B)/tb_perip_mandos.vvp -s tb_perip_mandos sim/tb_perip_mandos.v $(MANDOS)
++	$(RUN) $(VVP) -n $(B)/tb_perip_mandos.vvp $(ARGS)
++
+ wave:
+ 	$(RUN) $(GTKWAVE) $(B)/tb_soc.vcd &
+ 
+diff --git a/Grupos/G1/UART/Propuesta/boards/tangnano9k/com.v b/Grupos/G1/UART/Propuesta/boards/tangnano9k/com.v
+index 82b766a..97e931c 100644
+--- a/Grupos/G1/UART/Propuesta/boards/tangnano9k/com.v
++++ b/Grupos/G1/UART/Propuesta/boards/tangnano9k/com.v
+@@ -4,13 +4,14 @@
+ //   ESP32 --UART 115200 8N1--> uart_rx --> uart_8n1 --> desempaquetador
+ //                                                       --> registros P1 / P2
+ //
+-// Esta FPGA solo RECIBE: el ESP32 arma los bytes {PER_addr, jugador} + valor.
++// Esta FPGA solo RECIBE: el ESP32 manda la trama de 8 bytes del G5
++// (0xAA, jugador, secuencia, X, Y, shield, punch, XOR).
+ // (El empaquetador no se instancia aquí; la rama TX de uart_8n1 queda sin usar.)
+ //
+ // LEDs (activos en BAJO en la placa; aquí se invierten una sola vez):
+-//   led[0] = p1_punch                 led[3] = dir_err  (100 ms)
+-//   led[1] = p2_punch                 led[4] = val_err o error de trama (100 ms)
+-//   led[2] = byte recibido (100 ms)   led[5] = algún eje X/Y de P1 o P2 distinto de 0
++//   led[0] = p1_punch                 led[3] = dir_err, jugador inválido (100 ms)
++//   led[1] = p2_punch                 led[4] = checksum malo o error de UART (100 ms)
++//   led[2] = trama válida (100 ms)    led[5] = algún eje X/Y de P1 o P2 distinto de 0
+ //
+ // Reset: botón (activo en bajo) y además un reset automático al energizar.
+ // -----------------------------------------------------------------------------
+@@ -47,19 +48,21 @@ module com #(
+         .rx(uart_rx), .rx_data(rx_data), .rx_valid(rx_valid),
+         .rx_frame_err(rx_frame_err));
+ 
+-    wire [7:0] p1_x, p1_y, p2_x, p2_y;
+-    wire       p1_punch, p2_punch, dir_err, val_err;
++    wire [7:0] p1_x, p1_y, p1_seq, p2_x, p2_y, p2_seq;
++    wire       p1_punch, p1_shield, p2_punch, p2_shield;
++    wire       p1_nuevo, p2_nuevo, dir_err, val_err;
+ 
+-    desempaquetador des (
++    desempaquetador #(.T_MAX_CICLOS(CLK_HZ / 1000)) des (
+         .clk(clk), .rst_n(rst_n),
+-        .rx_data(rx_data), .rx_valid(rx_valid),
+-        .p1_x(p1_x), .p1_y(p1_y), .p1_punch(p1_punch),
+-        .p2_x(p2_x), .p2_y(p2_y), .p2_punch(p2_punch),
++        .rx_data(rx_data), .rx_valid(rx_valid), .rx_frame_err(rx_frame_err),
++        .p1_x(p1_x), .p1_y(p1_y), .p1_punch(p1_punch), .p1_shield(p1_shield), .p1_seq(p1_seq),
++        .p2_x(p2_x), .p2_y(p2_y), .p2_punch(p2_punch), .p2_shield(p2_shield), .p2_seq(p2_seq),
++        .p1_nuevo(p1_nuevo), .p2_nuevo(p2_nuevo),
+         .dir_err(dir_err), .val_err(val_err));
+ 
+     // ------------------------- LEDs -------------------------------------------
+     wire rx_led, dir_led, err_led;
+-    com_pulso #(.CICLOS(CICLOS_LED)) s_rx  (.clk(clk), .rst_n(rst_n), .pulso(rx_valid),                .activo(rx_led));
++    com_pulso #(.CICLOS(CICLOS_LED)) s_rx  (.clk(clk), .rst_n(rst_n), .pulso(p1_nuevo | p2_nuevo),     .activo(rx_led));
+     com_pulso #(.CICLOS(CICLOS_LED)) s_dir (.clk(clk), .rst_n(rst_n), .pulso(dir_err),                 .activo(dir_led));
+     com_pulso #(.CICLOS(CICLOS_LED)) s_err (.clk(clk), .rst_n(rst_n), .pulso(val_err | rx_frame_err),  .activo(err_led));
+ 
+diff --git a/Grupos/G1/UART/Propuesta/rtl/ctrl/desempaquetador.v b/Grupos/G1/UART/Propuesta/rtl/ctrl/desempaquetador.v
+index ede3c40..288aa7f 100644
+--- a/Grupos/G1/UART/Propuesta/rtl/ctrl/desempaquetador.v
++++ b/Grupos/G1/UART/Propuesta/rtl/ctrl/desempaquetador.v
+@@ -1,94 +1,135 @@
+ // -----------------------------------------------------------------------------
+-// DESEMPAQUETADOR (lado receptor) = FSM del diagrama Package_Manager
++// DESEMPAQUETADOR (lado receptor, consola) — autor original: Cesar Jaramillo (G1)
++// Versión adaptada a la trama acordada con G5 / G6 / G2 (8 bytes):
+ //
+-//   S_DIR : espera byte de dirección. Si está en el directorio -> guarda
+-//           PER_addr y P_Addr y pasa a S_VAL. Si no, lo descarta (dir_err).
+-//   S_VAL : espera el byte de valor, lo guarda en el registro del periférico
+-//           y jugador indicados, limpia los latches y vuelve a S_DIR.
++//   byte 0  CABECERA   0xAA
++//   byte 1  jugador    1 o 2
++//   byte 2  secuencia  0..255 (sube en cada trama)
++//   byte 3  X          con signo, -127..127
++//   byte 4  Y          con signo, -127..127
++//   byte 5  shield     bit 0 (botón del joystick)  -> registro bit 16
++//   byte 6  punch      bit 0 (ataque / golpe)      -> registro bit 17
++//   byte 7  checksum   XOR de los bytes 1..6
+ //
+-// Directorio = {PER_X, PER_Y, PER_PUNCH} x {JUG_P1, JUG_P2}  (6 direcciones)
+-// Los códigos tienen distancia de Hamming >= 2 dentro de cada nibble, así que
+-// un bit volteado en el byte de dirección nunca produce otra dirección válida.
+-// Punch: el valor solo puede ser 0x00 o 0x01; otro valor se descarta (val_err).
++// FSM (misma idea del diagrama Package_Manager, ahora por posición):
++//   S_DIR : espera la cabecera 0xAA (cualquier otro byte se ignora).
++//   S_VAL : guarda los bytes 1..6 en latches mientras acumula el XOR.
++//   S_CHK : compara el checksum. Si es correcto y el jugador es 1 o 2,
++//           copia TODA la muestra de ese jugador en un solo flanco.
++//
++// Errores (pulsos de 1 ciclo):
++//   dir_err : trama completa con checksum bien pero jugador distinto de 1 y 2
++//   val_err : checksum incorrecto (la muestra se descarta)
++// Resincronización: si llega rx_frame_err o pasan T_MAX_CICLOS sin bytes con
++// una trama a medias, se descarta y se vuelve a S_DIR.
+ //
+ // Los registros de salida solo se limpian con el reset global.
+ // -----------------------------------------------------------------------------
+ module desempaquetador #(
+-    parameter [3:0] PER_X     = 4'42,
+-    parameter [3:0] PER_Y     = 4'43,
+-    parameter [3:0] PER_PUNCH = 4'44,
+-    parameter [3:0] JUG_P1    = 4'h1,
+-    parameter [3:0] JUG_P2    = 4'h2
++    parameter [7:0]  CABECERA     = 8'hAA,
++    parameter [7:0]  JUG_P1       = 8'd1,
++    parameter [7:0]  JUG_P2       = 8'd2,
++    parameter integer T_MAX_CICLOS = 27_000          // 1 ms a 27 MHz
+ )(
+     input  wire       clk,
+     input  wire       rst_n,
+     // Desde la UART
+     input  wire [7:0] rx_data,
+     input  wire       rx_valid,
+-    // Últimos valores recibidos
++    input  wire       rx_frame_err,
++    // Última muestra válida de cada jugador
+     output reg  [7:0] p1_x,
+     output reg  [7:0] p1_y,
+     output reg        p1_punch,
++    output reg        p1_shield,
++    output reg  [7:0] p1_seq,
+     output reg  [7:0] p2_x,
+     output reg  [7:0] p2_y,
+     output reg        p2_punch,
+-    // Diagnóstico (pulsos de 1 ciclo)
++    output reg        p2_shield,
++    output reg  [7:0] p2_seq,
++    // Pulsos de 1 ciclo
++    output reg        p1_nuevo,     // llegó una trama válida del jugador 1
++    output reg        p2_nuevo,     // llegó una trama válida del jugador 2
+     output reg        dir_err,
+     output reg        val_err
+ );
+-    localparam S_DIR = 1'b0, S_VAL = 1'b1;
+-
+-    reg       state;
+-    reg [3:0] per_l, jug_l;           // PER_addr y P_Addr del paquete en curso
++    localparam [1:0] S_DIR = 2'd0, S_VAL = 2'd1, S_CHK = 2'd2;
++    localparam integer TW = $clog2(T_MAX_CICLOS + 1);
+ 
+-    wire per_ok  = (rx_data[7:4] == PER_X) | (rx_data[7:4] == PER_Y) |
+-                   (rx_data[7:4] == PER_PUNCH);
+-    wire jug_ok  = (rx_data[3:0] == JUG_P1) | (rx_data[3:0] == JUG_P2);
+-    wire addr_ok = per_ok & jug_ok;
++    reg [1:0]    state;
++    reg [2:0]    idx;                       // byte esperado dentro de S_VAL (1..6)
++    reg [7:0]    jug_l, seq_l, x_l, y_l;    // latches de la trama en curso
++    reg          shield_l, punch_l;
++    reg [7:0]    xor_l;
++    reg [TW-1:0] espera;
+ 
+     always @(posedge clk or negedge rst_n) begin
+         if (!rst_n) begin
+             state    <= S_DIR;
+-            per_l    <= 4'd0;
+-            jug_l    <= 4'd0;
+-            p1_x     <= 8'd0;  p1_y <= 8'd0;  p1_punch <= 1'b0;
+-            p2_x     <= 8'd0;  p2_y <= 8'd0;  p2_punch <= 1'b0;
+-            dir_err  <= 1'b0;
+-            val_err  <= 1'b0;
++            idx      <= 3'd0;
++            jug_l    <= 8'd0;  seq_l <= 8'd0;  x_l <= 8'd0;  y_l <= 8'd0;
++            shield_l <= 1'b0;  punch_l <= 1'b0;
++            xor_l    <= 8'd0;
++            espera   <= 0;
++            p1_x <= 8'd0; p1_y <= 8'd0; p1_punch <= 1'b0; p1_shield <= 1'b0; p1_seq <= 8'd0;
++            p2_x <= 8'd0; p2_y <= 8'd0; p2_punch <= 1'b0; p2_shield <= 1'b0; p2_seq <= 8'd0;
++            p1_nuevo <= 1'b0;  p2_nuevo <= 1'b0;
++            dir_err  <= 1'b0;  val_err  <= 1'b0;
+         end else begin
+-            dir_err <= 1'b0;
+-            val_err <= 1'b0;
++            p1_nuevo <= 1'b0;  p2_nuevo <= 1'b0;
++            dir_err  <= 1'b0;  val_err  <= 1'b0;
+ 
+-            if (rx_valid) begin
++            if (rx_frame_err) begin                 // byte corrupto: descartar trama
++                state  <= S_DIR;
++                espera <= 0;
++            end else if (rx_valid) begin
++                espera <= 0;
+                 case (state)
+-                    S_DIR: begin
+-                        if (addr_ok) begin
+-                            per_l <= rx_data[7:4];
+-                            jug_l <= rx_data[3:0];
+-                            state <= S_VAL;
+-                        end else dir_err <= 1'b1;
++                    S_DIR: if (rx_data == CABECERA) begin
++                        idx   <= 3'd1;
++                        xor_l <= 8'd0;
++                        state <= S_VAL;
+                     end
+ 
+                     S_VAL: begin
+-                        state <= S_DIR;
+-                        per_l <= 4'd0;        // el reset de la FSM limpia los latches
+-                        jug_l <= 4'd0;
++                        xor_l <= xor_l ^ rx_data;
++                        case (idx)
++                            3'd1:    jug_l    <= rx_data;
++                            3'd2:    seq_l    <= rx_data;
++                            3'd3:    x_l      <= rx_data;
++                            3'd4:    y_l      <= rx_data;
++                            3'd5:    shield_l <= rx_data[0];
++                            default: punch_l  <= rx_data[0];
++                        endcase
++                        if (idx == 3'd6) state <= S_CHK;
++                        else             idx   <= idx + 1'b1;
++                    end
+ 
+-                        if (per_l == PER_PUNCH && rx_data[7:1] != 7'd0) begin
+-                            val_err <= 1'b1;  // Punch solo puede valer 0 o 1
++                    S_CHK: begin
++                        state <= S_DIR;
++                        if (rx_data != xor_l) begin
++                            val_err <= 1'b1;        // checksum malo: se conserva lo anterior
++                        end else if (jug_l == JUG_P1) begin
++                            p1_x <= x_l; p1_y <= y_l; p1_shield <= shield_l;
++                            p1_punch <= punch_l; p1_seq <= seq_l;
++                            p1_nuevo <= 1'b1;
++                        end else if (jug_l == JUG_P2) begin
++                            p2_x <= x_l; p2_y <= y_l; p2_shield <= shield_l;
++                            p2_punch <= punch_l; p2_seq <= seq_l;
++                            p2_nuevo <= 1'b1;
+                         end else begin
+-                            if (jug_l == JUG_P1) begin
+-                                if      (per_l == PER_X)     p1_x     <= rx_data;
+-                                else if (per_l == PER_Y)     p1_y     <= rx_data;
+-                                else if (per_l == PER_PUNCH) p1_punch <= rx_data[0];
+-                            end else if (jug_l == JUG_P2) begin
+-                                if      (per_l == PER_X)     p2_x     <= rx_data;
+-                                else if (per_l == PER_Y)     p2_y     <= rx_data;
+-                                else if (per_l == PER_PUNCH) p2_punch <= rx_data[0];
+-                            end
++                            dir_err <= 1'b1;        // jugador que no existe
+                         end
+                     end
++
++                    default: state <= S_DIR;
+                 endcase
++            end else if (state != S_DIR) begin      // plazo entre bytes
++                if (espera == T_MAX_CICLOS - 1) begin
++                    state  <= S_DIR;
++                    espera <= 0;
++                end else espera <= espera + 1'b1;
+             end
+         end
+     end
+diff --git a/Grupos/G1/UART/Propuesta/rtl/ctrl/empaquetador.v b/Grupos/G1/UART/Propuesta/rtl/ctrl/empaquetador.v
+index e55e077..a039b83 100644
+--- a/Grupos/G1/UART/Propuesta/rtl/ctrl/empaquetador.v
++++ b/Grupos/G1/UART/Propuesta/rtl/ctrl/empaquetador.v
+@@ -1,94 +1,107 @@
+ // -----------------------------------------------------------------------------
+-// EMPAQUETADOR (lado emisor de un mando)
++// EMPAQUETADOR (lado emisor de un mando) — autor original: Cesar Jaramillo (G1)
++// Versión adaptada a la trama acordada con G5 / G6 / G2 (8 bytes):
+ //
+-// Recorre los 3 periféricos (X, Y, Punch) y por cada uno manda 2 bytes:
+-//     byte 1: {PER_addr[3:0], jugador[3:0]}
+-//     byte 2: valor  (Punch -> {7'b0, punch})
++//   byte 0  CABECERA   0xAA
++//   byte 1  jugador    1 o 2
++//   byte 2  secuencia  sube en cada trama (la lleva este módulo)
++//   byte 3  X          con signo, -127..127
++//   byte 4  Y          con signo, -127..127
++//   byte 5  shield     {7'b0, shield}   (botón del joystick)
++//   byte 6  punch      {7'b0, punch}    (ataque / golpe)
++//   byte 7  checksum   XOR de los bytes 1..6
+ //
+-// SOLO_CAMBIOS = 0 : manda todo continuamente (se autocorrige si algo se pierde)
+-// SOLO_CAMBIOS = 1 : manda un periférico solo si cambió (más liviano, pero si se
+-//                    pierde un paquete el receptor queda con el valor viejo)
+-// Tras un reset siempre se manda cada periférico al menos una vez.
++// Cada PERIODO ciclos (por defecto 1/30 s) congela la muestra del mando y
++// manda los 8 bytes seguidos. Como se manda siempre, si una trama se pierde
++// la siguiente corrige al receptor.
++//
++// FSM:  S_SCAN  -> espera el periodo y congela x, y, shield, punch
++//       S_ADDR  -> pone el byte idx en la UART (antes: byte de dirección)
++//       S_ADDR_W-> espera a que la UART termine; idx+1 o vuelve a S_SCAN
+ // -----------------------------------------------------------------------------
+ module empaquetador #(
+-    parameter [3:0] PER_X     = 4'42,
+-    parameter [3:0] PER_Y     = 4'43,
+-    parameter [3:0] PER_PUNCH = 4'44,
+-    //parameter [3:0] PER_SHIELD 4'44,
+-    parameter       SOLO_CAMBIOS = 0
++    parameter [7:0]   CABECERA = 8'hAA,
++    parameter integer CLK_HZ   = 27_000_000,
++    parameter integer TASA_HZ  = 30,                   // tramas por segundo
++    parameter integer PERIODO  = CLK_HZ / TASA_HZ      // ciclos entre tramas
+ )(
+     input  wire       clk,
+     input  wire       rst_n,
+     // Mando
+     input  wire [3:0] jugador,        // 4'h1 = P1, 4'h2 = P2
+-    input  wire [7:0] x,
+-    input  wire [7:0] y,
++    input  wire [7:0] x,              // con signo
++    input  wire [7:0] y,              // con signo
+     input  wire       punch,
+-    //input  wire       shield,
++    input  wire       shield,
+     // Hacia la UART
+     output reg  [7:0] tx_data,
+     output reg        tx_start,
+     input  wire       tx_busy
+ );
+-    localparam S_SCAN = 3'd0, S_ADDR = 3'd1, S_ADDR_W = 3'd2,
+-               S_VAL  = 3'd3, S_VAL_W = 3'd4;
++    localparam [1:0] S_SCAN = 2'd0, S_ADDR = 2'd1, S_ADDR_W = 2'd2;
++    localparam integer PW = $clog2(PERIODO + 1);
++
++    reg [1:0]    state;
++    reg [2:0]    idx;                 // byte de la trama que se está mandando (0..7)
++    reg [PW-1:0] cnt;                 // contador del periodo
++    reg [7:0]    seq;                 // número de secuencia
++    reg [7:0]    jug_l, x_l, y_l;     // muestra congelada para la trama en curso
++    reg          shield_l, punch_l;
+ 
+-    reg [2:0]  state;
+-    reg [1:0]  idx;                   // 0 = X, 1 = Y, 2 = Punch
+-    reg [7:0]  val_l;                 // valor congelado para el paquete en curso
+-    reg [31:0] last;                  // último valor enviado de cada periférico
+-    reg [3:0]  pend;                  // pendiente de primer envío tras reset
++    wire [7:0] chk = jug_l ^ seq ^ x_l ^ y_l ^ {7'b0, shield_l} ^ {7'b0, punch_l};
+ 
+-    // [SHIELD 4/6] con shield, reemplazar cur y per por las versiones comentadas:
+-    wire [7:0] cur = (idx == 2'd0) ? x :
+-                     (idx == 2'd1) ? y : {7'b0, punch};
+-    wire [3:0] per = (idx == 2'd0) ? PER_X :
+-                     (idx == 2'd1) ? PER_Y : PER_PUNCH;
+-    // wire [7:0] cur = (idx == 2'd0) ? x :
+-    //                  (idx == 2'd1) ? y :
+-    //                  (idx == 2'd2) ? {7'b0, punch} : {7'b0, shield};
+-    // wire [3:0] per = (idx == 2'd0) ? PER_X :
+-    //                  (idx == 2'd1) ? PER_Y :
+-    //                  (idx == 2'd2) ? PER_PUNCH : PER_SHIELD;
+-    wire cambio  = (cur != last[idx*8 +: 8]) | pend[idx];
+-    wire enviar  = (SOLO_CAMBIOS == 0) | cambio;
+-    wire [1:0] idx_sig = (idx == 2'd2) ? 2'd0 : idx + 1'b1;
++    reg [7:0] cur;                    // byte idx de la trama
++    always @(*) begin
++        case (idx)
++            3'd0:    cur = CABECERA;
++            3'd1:    cur = jug_l;
++            3'd2:    cur = seq;
++            3'd3:    cur = x_l;
++            3'd4:    cur = y_l;
++            3'd5:    cur = {7'b0, shield_l};
++            3'd6:    cur = {7'b0, punch_l};
++            default: cur = chk;
++        endcase
++    end
+ 
+     always @(posedge clk or negedge rst_n) begin
+         if (!rst_n) begin
+             state    <= S_SCAN;
+-            idx      <= 2'd0;
+-            val_l    <= 8'd0;
+-            last     <= 24'd0;
+-            pend     <= 3'b111;
++            idx      <= 3'd0;
++            cnt      <= 0;
++            seq      <= 8'd0;
++            jug_l    <= 8'd0;  x_l <= 8'd0;  y_l <= 8'd0;
++            shield_l <= 1'b0;  punch_l <= 1'b0;
+             tx_data  <= 8'd0;
+             tx_start <= 1'b0;
+         end else begin
+             tx_start <= 1'b0;
++            if (cnt != 0) cnt <= cnt - 1'b1;
+ 
+             case (state)
+-                S_SCAN: begin
+-                    if (enviar) begin
+-                        val_l              <= cur;
+-                        last[idx*8 +: 8]   <= cur;
+-                        pend[idx]          <= 1'b0;
+-                        state              <= S_ADDR;
+-                    end else idx <= idx_sig;
++                S_SCAN: if (cnt == 0) begin            // tras reset sale de una vez
++                    cnt      <= PERIODO - 1;
++                    jug_l    <= {4'h0, jugador};
++                    x_l      <= x;
++                    y_l      <= y;
++                    shield_l <= shield;
++                    punch_l  <= punch;
++                    idx      <= 3'd0;
++                    state    <= S_ADDR;
+                 end
+                 S_ADDR: if (!tx_busy) begin
+-                    tx_data  <= {per, jugador};
++                    tx_data  <= cur;
+                     tx_start <= 1'b1;
+                     state    <= S_ADDR_W;
+                 end
+-                S_ADDR_W: if (!tx_busy) state <= S_VAL;
+-                S_VAL: if (!tx_busy) begin
+-                    tx_data  <= val_l;
+-                    tx_start <= 1'b1;
+-                    state    <= S_VAL_W;
+-                end
+-                S_VAL_W: if (!tx_busy) begin
+-                    idx   <= idx_sig;
+-                    state <= S_SCAN;
++                S_ADDR_W: if (!tx_busy) begin
++                    if (idx == 3'd7) begin
++                        seq   <= seq + 1'b1;
++                        state <= S_SCAN;
++                    end else begin
++                        idx   <= idx + 1'b1;
++                        state <= S_ADDR;
++                    end
+                 end
+                 default: state <= S_SCAN;
+             endcase
+diff --git a/Grupos/G1/UART/Propuesta/rtl/ctrl/perip_mandos.v b/Grupos/G1/UART/Propuesta/rtl/ctrl/perip_mandos.v
+new file mode 100644
+index 0000000..f3a159e
+--- /dev/null
++++ b/Grupos/G1/UART/Propuesta/rtl/ctrl/perip_mandos.v
+@@ -0,0 +1,95 @@
++// -----------------------------------------------------------------------------
++// perip_mandos.v — Periférico de mandos para el SoC de la consola (G1)
++// Usa uart_8n1 + desempaquetador (Cesar Jaramillo) y presenta los registros
++// que espera el juego del G6 (firmware/hardware.h) y que documenta el G5.
++//
++// Región del SoC: 0x0047_xxxx  (chip_select.v, cs[7])
++//   +0x0  JOY1_DATA  [7:0] X  [15:8] Y  [16] shield (botón)  [17] punch (ataque)
++//                    [23:18] 0  [31:24] secuencia
++//   +0x4  JOY2_DATA  igual para el jugador 2
++//   +0x8  STATUS     [0] P1_VALID  [1] P2_VALID  [2] UART_ERROR  [3] CHECKSUM_ERROR
++//   otros 0
++// Las banderas de STATUS quedan en 1 hasta el reset (contrato del G5).
++//
++// Bus igual al de peripheral_mult / peripheral_uart del SoC:
++//   clk, reset (alto), d_in, cs, addr[31:0] (solo addr[3:0]), rd, wr, d_out
++//   d_out se captura en el flanco siguiente a cs & rd (misma latencia que mult).
++// Registros de solo lectura: wr y d_in no se usan.
++// -----------------------------------------------------------------------------
++module peripheral_mandos #(
++    parameter integer CLK_HZ = 27_000_000,
++    parameter integer BAUD   = 115_200
++) (
++    input  wire        clk,
++    input  wire        reset,
++    input  wire [31:0] d_in,
++    input  wire        cs,
++    input  wire [31:0] addr,
++    input  wire        rd,
++    input  wire        wr,
++    output reg  [31:0] d_out,
++    // Línea física: TX de la ESP32 de la consola
++    input  wire        uart_rx,
++    // Para LEDs o depuración (opcional)
++    output wire [31:0] joy1_data,
++    output wire [31:0] joy2_data,
++    output wire [3:0]  status
++);
++    wire rst_n = ~reset;
++
++    // ---------------- UART (solo RX) ----------------
++    wire [7:0] rx_data;
++    wire       rx_valid, rx_frame_err;
++
++    uart_8n1 #(.CLK_HZ(CLK_HZ), .BAUD(BAUD)) u_uart (
++        .clk(clk), .rst_n(rst_n),
++        .tx_data(8'd0), .tx_start(1'b0), .tx(), .tx_busy(),
++        .rx(uart_rx), .rx_data(rx_data), .rx_valid(rx_valid),
++        .rx_frame_err(rx_frame_err));
++
++    // ---------------- Desempaquetador ----------------
++    wire [7:0] p1_x, p1_y, p1_seq, p2_x, p2_y, p2_seq;
++    wire       p1_punch, p1_shield, p2_punch, p2_shield;
++    wire       p1_nuevo, p2_nuevo, dir_err, val_err;
++
++    desempaquetador #(.T_MAX_CICLOS(CLK_HZ / 1000)) des (
++        .clk(clk), .rst_n(rst_n),
++        .rx_data(rx_data), .rx_valid(rx_valid), .rx_frame_err(rx_frame_err),
++        .p1_x(p1_x), .p1_y(p1_y), .p1_punch(p1_punch), .p1_shield(p1_shield), .p1_seq(p1_seq),
++        .p2_x(p2_x), .p2_y(p2_y), .p2_punch(p2_punch), .p2_shield(p2_shield), .p2_seq(p2_seq),
++        .p1_nuevo(p1_nuevo), .p2_nuevo(p2_nuevo),
++        .dir_err(dir_err), .val_err(val_err));
++
++    // ---------------- STATUS ----------------
++    reg p1_valid, p2_valid, uart_error, chk_error;
++    always @(posedge clk) begin
++        if (reset) begin
++            p1_valid <= 1'b0;  p2_valid  <= 1'b0;
++            uart_error <= 1'b0; chk_error <= 1'b0;
++        end else begin
++            if (p1_nuevo)     p1_valid   <= 1'b1;
++            if (p2_nuevo)     p2_valid   <= 1'b1;
++            if (rx_frame_err) uart_error <= 1'b1;
++            if (val_err)      chk_error  <= 1'b1;
++        end
++    end
++
++    assign joy1_data = {p1_seq, 6'd0, p1_punch, p1_shield, p1_y, p1_x};
++    assign joy2_data = {p2_seq, 6'd0, p2_punch, p2_shield, p2_y, p2_x};
++    assign status    = {chk_error, uart_error, p2_valid, p1_valid};
++
++    // ---------------- Lectura desde el procesador ----------------
++    always @(posedge clk) begin
++        if (reset) d_out <= 32'd0;
++        else if (cs && rd) begin
++            case (addr[3:0])
++                4'h0:    d_out <= joy1_data;
++                4'h4:    d_out <= joy2_data;
++                4'h8:    d_out <= {28'd0, status};
++                default: d_out <= 32'd0;
++            endcase
++        end
++    end
++
++    wire _sin_uso = &{1'b0, wr, d_in, addr[31:4]};
++endmodule
+diff --git a/Grupos/G1/UART/Propuesta/rtl/ctrl/uart_8n1.v b/Grupos/G1/UART/Propuesta/rtl/ctrl/uart_8n1.v
+index c14e847..3bb4fb9 100644
+--- a/Grupos/G1/UART/Propuesta/rtl/ctrl/uart_8n1.v
++++ b/Grupos/G1/UART/Propuesta/rtl/ctrl/uart_8n1.v
+@@ -5,7 +5,8 @@
+ // TX: poner tx_data y pulsar tx_start (1 ciclo) cuando tx_busy = 0.
+ //     tx_busy sube en el mismo ciclo en que tx_start vale 1.
+ // RX: rx_valid es un pulso de 1 ciclo con rx_data listo.
+-//     Si el stop bit no es 1 no hay rx_valid: se levanta rx_frame_err.
++//     Si el stop bit no es 1 no hay rx_valid: se levanta rx_frame_err y se
++//     espera a que la línea vuelva a 1 antes de buscar otro start (R_ESPERA).
+ // -----------------------------------------------------------------------------
+ module uart_8n1 #(
+     parameter CLK_HZ = 27_000_000,
+@@ -88,10 +89,11 @@ module uart_8n1 #(
+     end
+ 
+     // ------------------------------- RX --------------------------------------
+-    localparam R_IDLE = 2'd0, R_START = 2'd1, R_DATA = 2'd2, R_STOP = 2'd3;
++    localparam R_IDLE = 3'd0, R_START = 3'd1, R_DATA = 3'd2, R_STOP = 3'd3,
++               R_ESPERA = 3'd4;
+ 
+     reg [1:0]    rx_sync;
+-    reg [1:0]    r_state;
++    reg [2:0]    r_state;
+     reg [CW-1:0] r_cnt;
+     reg [2:0]    r_idx;
+     reg [7:0]    r_sh;
+@@ -138,13 +140,18 @@ module uart_8n1 #(
+                 R_STOP: begin
+                     if (r_cnt == CPB-1) begin
+                         r_cnt   <= 0;
+-                        r_state <= R_IDLE;
+                         if (rx_in) begin
+                             rx_data  <= r_sh;
+                             rx_valid <= 1'b1;
+-                        end else rx_frame_err <= 1'b1;
++                            r_state  <= R_IDLE;
++                        end else begin
++                            rx_frame_err <= 1'b1;
++                            r_state      <= R_ESPERA;   // línea en 0: no leer basura
++                        end
+                     end else r_cnt <= r_cnt + 1'b1;
+                 end
++                R_ESPERA: if (rx_in) r_state <= R_IDLE;
++                default:  r_state <= R_IDLE;
+             endcase
+         end
+     end
+diff --git a/Grupos/G1/UART/Propuesta/sim/tb_com.v b/Grupos/G1/UART/Propuesta/sim/tb_com.v
+index c83db75..7e1521b 100644
+--- a/Grupos/G1/UART/Propuesta/sim/tb_com.v
++++ b/Grupos/G1/UART/Propuesta/sim/tb_com.v
+@@ -1,5 +1,5 @@
+ `timescale 1ns/1ps
+-// Prueba del top com: se golpea uart_rx a mano (como lo haría el ESP32)
++// Prueba del top com: se golpea uart_rx a mano con la trama del G5 (como la ESP32)
+ module tb_com;
+     reg clk = 0, btn = 1, rx = 1;
+     always #18.518 clk = ~clk;                       // 27 MHz
+@@ -20,6 +20,17 @@ module tb_com;
+         end
+     endtask
+ 
++    // AA, jugador, secuencia, X, Y, shield, punch, XOR(1..6); chk_ok = 0 lo daña
++    task trama(input [7:0] jug, seq, tx_, ty, sh, pu, input chk_ok);
++        reg [7:0] c;
++        begin
++            c = jug ^ seq ^ tx_ ^ ty ^ sh ^ pu;
++            byte_tx(8'hAA); byte_tx(jug); byte_tx(seq); byte_tx(tx_);
++            byte_tx(ty); byte_tx(sh); byte_tx(pu); byte_tx(chk_ok ? c : ~c);
++            repeat (10) @(posedge clk);
++        end
++    endtask
++
+     task check(input [255:0] nombre, input [15:0] obtenido, input [15:0] esperado);
+         begin
+             if (obtenido !== esperado) begin
+@@ -34,23 +45,24 @@ module tb_com;
+         $display("--- tras el reset: LEDs apagados ---");
+         check("led", led, 6'b111111);
+ 
+-        $display("--- P1 X = 7E ---");
+-        byte_tx(8'h11); byte_tx(8'h7E);
++        $display("--- P1 X = +126 ---");
++        trama(8'd1, 8'd0, 8'h7E, 8'h00, 8'd0, 8'd0, 1'b1);
+         check("p1_x", dut.p1_x, 8'h7E);
+         check("led[5] joy_activo", led[5], 1'b0);
+-        check("led[2] byte recibido", led[2], 1'b0);
++        check("led[2] trama valida", led[2], 1'b0);
+ 
+-        $display("--- P2 Punch = 1 ---");
+-        byte_tx(8'h42); byte_tx(8'h01);
++        $display("--- P2 Punch = 1, Shield = 1 ---");
++        trama(8'd2, 8'd1, 8'h00, 8'h00, 8'd1, 8'd1, 1'b1);
+         check("p2_punch", dut.p2_punch, 1'b1);
++        check("p2_shield", dut.p2_shield, 1'b1);
+         check("led[1]", led[1], 1'b0);
+ 
+-        $display("--- direccion invalida 0xFF ---");
+-        byte_tx(8'hFF);
++        $display("--- jugador invalido (5) ---");
++        trama(8'd5, 8'd2, 8'h01, 8'h01, 8'd0, 8'd1, 1'b1);
+         check("led[3] dir_err", led[3], 1'b0);
+ 
+-        $display("--- Punch con valor invalido 0x05 ---");
+-        byte_tx(8'h41); byte_tx(8'h05);
++        $display("--- checksum malo ---");
++        trama(8'd1, 8'd3, 8'h00, 8'h00, 8'd0, 8'd1, 1'b0);
+         check("p1_punch (ignorado)", dut.p1_punch, 1'b0);
+         check("led[4] val_err", led[4], 1'b0);
+ 
+diff --git a/Grupos/G1/UART/Propuesta/sim/tb_ctrl.v b/Grupos/G1/UART/Propuesta/sim/tb_ctrl.v
+index ee0b973..192750c 100644
+--- a/Grupos/G1/UART/Propuesta/sim/tb_ctrl.v
++++ b/Grupos/G1/UART/Propuesta/sim/tb_ctrl.v
+@@ -1,19 +1,21 @@
+ `timescale 1ns/1ps
+ // Lazo cerrado: empaquetador -> uart_8n1 (TX) -> cable -> uart_8n1 (RX) -> desempaquetador
++// Trama del G5: AA, jugador, secuencia, X, Y, shield, punch, XOR(1..6)
+ module tb_ctrl;
+     reg clk = 0, rst_n = 0;
+     always #18.518 clk = ~clk;                 // 27 MHz
+ 
+-    // Mando del jugador 2
+-    reg  [7:0] x = 8'hA5, y = 8'h3C;
+-    reg        punch = 1'b1;
++    // Mando del jugador 2 (X e Y con signo)
++    reg  [7:0] x = 8'h64, y = 8'hC4;           // +100, -60
++    reg        punch = 1'b1, shield = 1'b0;
+ 
+     wire [7:0] tx_data;  wire tx_start, tx_busy, linea;
+     wire [7:0] rx_data;  wire rx_valid, rx_ferr;
+ 
+-    empaquetador #(.SOLO_CAMBIOS(0)) emp (
++    // Periodo corto para no simular 1/30 s (una trama son 8*10*234 = 18720 ciclos)
++    empaquetador #(.PERIODO(25_000)) emp (
+         .clk(clk), .rst_n(rst_n), .jugador(4'h2),
+-        .x(x), .y(y), .punch(punch),
++        .x(x), .y(y), .punch(punch), .shield(shield),
+         .tx_data(tx_data), .tx_start(tx_start), .tx_busy(tx_busy));
+ 
+     uart_8n1 u_tx (
+@@ -26,30 +28,38 @@ module tb_ctrl;
+         .tx_data(8'd0), .tx_start(1'b0), .tx(), .tx_busy(),
+         .rx(linea), .rx_data(rx_data), .rx_valid(rx_valid), .rx_frame_err(rx_ferr));
+ 
+-    wire [7:0] p1_x, p1_y, p2_x, p2_y;
+-    wire       p1_punch, p2_punch, dir_err, val_err;
++    wire [7:0] p1_x, p1_y, p1_seq, p2_x, p2_y, p2_seq;
++    wire       p1_punch, p1_shield, p2_punch, p2_shield, p1_nuevo, p2_nuevo, dir_err, val_err;
+ 
+     desempaquetador des (
+-        .clk(clk), .rst_n(rst_n), .rx_data(rx_data), .rx_valid(rx_valid),
+-        .p1_x(p1_x), .p1_y(p1_y), .p1_punch(p1_punch),
+-        .p2_x(p2_x), .p2_y(p2_y), .p2_punch(p2_punch),
+-        .dir_err(dir_err), .val_err(val_err));
+-
+-    // Segundo desempaquetador alimentado a mano (pruebas de error)
+-    reg [7:0] m_data = 0;  reg m_valid = 0;
+-    wire [7:0] q1_x, q1_y, q2_x, q2_y;  wire q1_p, q2_p, q_derr, q_verr;
+-    desempaquetador des2 (
+-        .clk(clk), .rst_n(rst_n), .rx_data(m_data), .rx_valid(m_valid),
+-        .p1_x(q1_x), .p1_y(q1_y), .p1_punch(q1_p),
+-        .p2_x(q2_x), .p2_y(q2_y), .p2_punch(q2_p),
+-        .dir_err(q_derr), .val_err(q_verr));
+-
+-    integer fallos = 0, n_derr = 0, n_verr = 0;
+-    always @(posedge clk) if (q_derr) n_derr = n_derr + 1;
+-    always @(posedge clk) if (q_verr) n_verr = n_verr + 1;
++        .clk(clk), .rst_n(rst_n),
++        .rx_data(rx_data), .rx_valid(rx_valid), .rx_frame_err(rx_ferr),
++        .p1_x(p1_x), .p1_y(p1_y), .p1_punch(p1_punch), .p1_shield(p1_shield), .p1_seq(p1_seq),
++        .p2_x(p2_x), .p2_y(p2_y), .p2_punch(p2_punch), .p2_shield(p2_shield), .p2_seq(p2_seq),
++        .p1_nuevo(p1_nuevo), .p2_nuevo(p2_nuevo), .dir_err(dir_err), .val_err(val_err));
++
++    // Segundo desempaquetador alimentado a mano (pruebas de error), plazo de 200 ciclos
++    reg [7:0] m_data = 0;  reg m_valid = 0, m_ferr = 0;
++    wire [7:0] q1_x, q1_y, q1_seq, q2_x, q2_y, q2_seq;
++    wire q1_p, q1_s, q2_p, q2_s, q1_n, q2_n, q_derr, q_verr;
++    desempaquetador #(.T_MAX_CICLOS(200)) des2 (
++        .clk(clk), .rst_n(rst_n),
++        .rx_data(m_data), .rx_valid(m_valid), .rx_frame_err(m_ferr),
++        .p1_x(q1_x), .p1_y(q1_y), .p1_punch(q1_p), .p1_shield(q1_s), .p1_seq(q1_seq),
++        .p2_x(q2_x), .p2_y(q2_y), .p2_punch(q2_p), .p2_shield(q2_s), .p2_seq(q2_seq),
++        .p1_nuevo(q1_n), .p2_nuevo(q2_n), .dir_err(q_derr), .val_err(q_verr));
++
++    integer fallos = 0, pruebas = 0, n_derr = 0, n_verr = 0, n_q1 = 0, n_p2 = 0;
++    always @(posedge clk) begin
++        if (q_derr) n_derr = n_derr + 1;
++        if (q_verr) n_verr = n_verr + 1;
++        if (q1_n)   n_q1   = n_q1 + 1;
++        if (p2_nuevo) n_p2 = n_p2 + 1;
++    end
+ 
+     task check(input [255:0] nombre, input [15:0] obtenido, input [15:0] esperado);
+         begin
++            pruebas = pruebas + 1;
+             if (obtenido !== esperado) begin
+                 $display("FALLO %0s: obtenido %h, esperado %h", nombre, obtenido, esperado);
+                 fallos = fallos + 1;
+@@ -65,37 +75,69 @@ module tb_ctrl;
+         end
+     endtask
+ 
++    // Trama completa a mano; chk_ok = 0 manda un checksum equivocado
++    task trama(input [7:0] jug, seq, tx_, ty, sh, pu, input chk_ok);
++        reg [7:0] c;
++        begin
++            c = jug ^ seq ^ tx_ ^ ty ^ sh ^ pu;
++            manda(8'hAA); manda(jug); manda(seq); manda(tx_); manda(ty);
++            manda(sh); manda(pu); manda(chk_ok ? c : ~c);
++        end
++    endtask
++
++    reg [7:0] seq_a;
+     initial begin
+         #200 rst_n = 1;
+ 
+         // 1) Lazo cerrado, jugador 2
+-        #3_000_000;
+-        $display("--- lazo cerrado: P2 = (A5, 3C, 1) ---");
+-        check("p2_x", p2_x, 8'hA5);  check("p2_y", p2_y, 8'h3C);  check("p2_punch", p2_punch, 1'b1);
++        #1_200_000;
++        $display("--- lazo cerrado: P2 = (+100, -60, punch 1, shield 0) ---");
++        check("p2_x", p2_x, 8'h64);  check("p2_y", p2_y, 8'hC4);
++        check("p2_punch", p2_punch, 1'b1);  check("p2_shield", p2_shield, 1'b0);
+         check("p1_x (intacto)", p1_x, 8'h00);  check("p1_punch (intacto)", p1_punch, 1'b0);
+         check("rx_frame_err", rx_ferr, 1'b0);
+-
+-        // 2) Cambia el mando
+-        x = 8'h10;  y = 8'hFF;  punch = 1'b0;
+-        #3_000_000;
+-        $display("--- cambio de valores: P2 = (10, FF, 0) ---");
+-        check("p2_x", p2_x, 8'h10);  check("p2_y", p2_y, 8'hFF);  check("p2_punch", p2_punch, 1'b0);
++        check("val_err", val_err, 1'b0);
++
++        // 2) Cambia el mando; la secuencia debe subir
++        seq_a = p2_seq;
++        x = 8'h81;  y = 8'h7F;  punch = 1'b0;  shield = 1'b1;      // -127, +127
++        #2_000_000;
++        $display("--- cambio de valores: P2 = (-127, +127, punch 0, shield 1) ---");
++        check("p2_x", p2_x, 8'h81);  check("p2_y", p2_y, 8'h7F);
++        check("p2_punch", p2_punch, 1'b0);  check("p2_shield", p2_shield, 1'b1);
++        check("secuencia sube", (p2_seq != seq_a), 1'b1);
++        check("tramas recibidas >= 3", (n_p2 >= 3), 1'b1);
+ 
+         // 3) Errores, con entrada manual
+-        $display("--- errores ---");
+-        manda(8'hFF);                       // dirección inexistente
+-        manda(8'h11); manda(8'h7E);         // P1 X = 7E
+-        manda(8'h41); manda(8'h05);         // Punch con valor inválido
+-        manda(8'h13);                       // 0x13: un bit volteado de 0x11 / 0x12
+-        manda(8'h42); manda(8'h01);         // P2 Punch = 1
+-        check("q1_x", q1_x, 8'h7E);
+-        check("q1_punch (valor invalido ignorado)", q1_p, 1'b0);
+-        check("q2_punch", q2_p, 1'b1);
+-        check("dir_err (FF y 13)", n_derr, 2);
+-        check("val_err (punch=05)", n_verr, 1);
+-
+-        if (fallos == 0) $display("\nTODO OK");
+-        else             $display("\n%0d FALLOS", fallos);
++        $display("--- errores (entrada manual) ---");
++        manda(8'h11); manda(8'h7E);                            // basura antes de la cabecera
++        trama(8'd1, 8'd5, 8'h10, 8'hF0, 8'd1, 8'd0, 1'b1);    // P1 válida
++        check("q1_x", q1_x, 8'h10);  check("q1_y", q1_y, 8'hF0);
++        check("q1_shield", q1_s, 1'b1);  check("q1_seq", q1_seq, 8'd5);
++
++        trama(8'd1, 8'd6, 8'h55, 8'h55, 8'd0, 8'd1, 1'b0);    // checksum malo
++        check("q1_x (checksum malo)", q1_x, 8'h10);
++        check("val_err", n_verr, 1);
++
++        trama(8'd3, 8'd7, 8'h01, 8'h02, 8'd0, 8'd0, 1'b1);    // jugador 3
++        check("dir_err (jugador 3)", n_derr, 1);
++
++        trama(8'd2, 8'd8, 8'hAA, 8'hAA, 8'd0, 8'd1, 1'b1);    // 0xAA dentro de los datos
++        check("q2_x (0xAA como dato)", q2_x, 8'hAA);  check("q2_punch", q2_p, 1'b1);
++
++        manda(8'hAA); manda(8'd1); manda(8'd9);                // trama cortada
++        repeat (300) @(posedge clk);                           // vence el plazo
++        trama(8'd1, 8'd10, 8'h20, 8'h30, 8'd0, 8'd1, 1'b1);
++        check("q1_x tras plazo", q1_x, 8'h20);
++
++        manda(8'hAA); manda(8'd1);                             // trama cortada por error UART
++        @(posedge clk); m_ferr <= 1'b1; @(posedge clk); m_ferr <= 1'b0;
++        trama(8'd1, 8'd11, 8'h40, 8'h50, 8'd0, 8'd0, 1'b1);
++        check("q1_x tras error de UART", q1_x, 8'h40);
++        check("tramas validas P1", n_q1, 3);
++
++        if (fallos == 0) $display("\nTODO OK (%0d pruebas)", pruebas);
++        else             $display("\n%0d FALLOS de %0d", fallos, pruebas);
+         $finish;
+     end
+ endmodule
+diff --git a/Grupos/G1/UART/Propuesta/sim/tb_perip_mandos.v b/Grupos/G1/UART/Propuesta/sim/tb_perip_mandos.v
+new file mode 100644
+index 0000000..c2fc943
+--- /dev/null
++++ b/Grupos/G1/UART/Propuesta/sim/tb_perip_mandos.v
+@@ -0,0 +1,109 @@
++`timescale 1ns/1ps
++// Prueba del periférico de mandos con el bus del SoC (como lo lee el FemtoRV)
++// La línea uart_rx se golpea como lo haría la ESP32 de la consola.
++module tb_perip_mandos;
++    reg clk = 0, reset = 1, rx = 1;
++    always #18.518 clk = ~clk;                       // 27 MHz
++
++    reg         cs = 0, rd = 0, wr = 0;
++    reg  [31:0] addr = 0, d_in = 0;
++    wire [31:0] d_out;
++
++    peripheral_mandos dut (
++        .clk(clk), .reset(reset), .d_in(d_in), .cs(cs), .addr(addr),
++        .rd(rd), .wr(wr), .d_out(d_out), .uart_rx(rx),
++        .joy1_data(), .joy2_data(), .status());
++
++    integer fallos = 0, pruebas = 0;
++
++    task check(input [255:0] nombre, input [31:0] obtenido, input [31:0] esperado);
++        begin
++            pruebas = pruebas + 1;
++            if (obtenido !== esperado) begin
++                $display("FALLO %0s: obtenido %h, esperado %h", nombre, obtenido, esperado);
++                fallos = fallos + 1;
++            end else $display("ok    %0s = %h", nombre, obtenido);
++        end
++    endtask
++
++    // Lectura de 32 bits: cs y rd un ciclo, el dato queda en d_out al siguiente
++    task leer(input [31:0] a, output [31:0] v);
++        begin
++            @(posedge clk); addr <= a; cs <= 1'b1; rd <= 1'b1;
++            @(posedge clk); cs <= 1'b0; rd <= 1'b0;
++            #1 v = d_out;
++        end
++    endtask
++
++    task byte_tx(input [7:0] b, input stop_ok);
++        integer i;
++        begin
++            rx = 0;                  repeat (234) @(posedge clk);
++            for (i = 0; i < 8; i = i + 1) begin
++                rx = b[i];           repeat (234) @(posedge clk);
++            end
++            rx = stop_ok;            repeat (234) @(posedge clk);
++            rx = 1;                  repeat (20)  @(posedge clk);
++        end
++    endtask
++
++    task trama(input [7:0] jug, seq, tx_, ty, sh, pu, input chk_ok);
++        reg [7:0] c;
++        begin
++            c = jug ^ seq ^ tx_ ^ ty ^ sh ^ pu;
++            byte_tx(8'hAA,1); byte_tx(jug,1); byte_tx(seq,1); byte_tx(tx_,1);
++            byte_tx(ty,1); byte_tx(sh,1); byte_tx(pu,1); byte_tx(chk_ok ? c : ~c, 1);
++            repeat (10) @(posedge clk);
++        end
++    endtask
++
++    reg [31:0] v;
++    initial begin
++        repeat (5) @(posedge clk); reset = 0;
++
++        $display("--- tras el reset ---");
++        leer(32'h0047_0000, v); check("JOY1_DATA", v, 32'h0);
++        leer(32'h0047_0008, v); check("STATUS", v, 32'h0);
++
++        $display("--- J1: X=-100 Y=+50 shield=1 punch=0 seq=7 ---");
++        trama(8'd1, 8'd7, 8'h9C, 8'h32, 8'd1, 8'd0, 1'b1);
++        leer(32'h0047_0000, v); check("JOY1_DATA", v, 32'h07_01_32_9C);
++        check("  X con signo", $signed(v[7:0]), -100);
++        leer(32'h0047_0008, v); check("STATUS (P1_VALID)", v, 32'h1);
++
++        $display("--- J2: X=+127 Y=-127 shield=0 punch=1 seq=200 ---");
++        trama(8'd2, 8'd200, 8'h7F, 8'h81, 8'd0, 8'd1, 1'b1);
++        leer(32'h0047_0004, v); check("JOY2_DATA", v, 32'hC8_02_81_7F);
++        leer(32'h0047_0000, v); check("JOY1_DATA (sin cambio)", v, 32'h07_01_32_9C);
++        leer(32'h0047_0008, v); check("STATUS (P1|P2)", v, 32'h3);
++
++        $display("--- checksum malo: J1 no cambia, CHECKSUM_ERROR ---");
++        trama(8'd1, 8'd8, 8'h00, 8'h00, 8'd1, 8'd1, 1'b0);
++        leer(32'h0047_0000, v); check("JOY1_DATA", v, 32'h07_01_32_9C);
++        leer(32'h0047_0008, v); check("STATUS", v, 32'hB);
++
++        $display("--- bit de parada malo: UART_ERROR, luego trama buena ---");
++        byte_tx(8'hAA,1); byte_tx(8'd1,1); byte_tx(8'h33,0);
++        trama(8'd1, 8'd9, 8'h05, 8'hFB, 8'd0, 8'd1, 1'b1);
++        leer(32'h0047_0000, v); check("JOY1_DATA", v, 32'h09_02_FB_05);
++        leer(32'h0047_0008, v); check("STATUS", v, 32'hF);
++
++        $display("--- desplazamiento reservado y alias cada 16 bytes ---");
++        leer(32'h0047_000C, v); check("+0xC reservado", v, 32'h0);
++        leer(32'h0047_0014, v); check("+0x14 = JOY2", v, 32'hC8_02_81_7F);
++
++        $display("--- escritura ignorada (solo lectura) ---");
++        @(posedge clk); addr <= 32'h0047_0000; d_in <= 32'hFFFF_FFFF; cs <= 1; wr <= 1;
++        @(posedge clk); cs <= 0; wr <= 0;
++        leer(32'h0047_0000, v); check("JOY1_DATA", v, 32'h09_02_FB_05);
++
++        $display("--- reset ---");
++        @(posedge clk); reset = 1; @(posedge clk); @(posedge clk); reset = 0;
++        leer(32'h0047_0000, v); check("JOY1_DATA", v, 32'h0);
++        leer(32'h0047_0008, v); check("STATUS", v, 32'h0);
++
++        if (fallos == 0) $display("\nTODO OK (%0d pruebas)", pruebas);
++        else             $display("\n%0d FALLOS de %0d", fallos, pruebas);
++        $finish;
++    end
++endmodule
+diff --git a/projecto/consola/Makefile b/projecto/consola/Makefile
+index db6f6fb..ab24ed3 100644
+--- a/projecto/consola/Makefile
++++ b/projecto/consola/Makefile
+@@ -44,7 +44,8 @@ RTL_GEN   ?= netlist2svg
+ # --- Archivos ---------------------------------------------------------------
+ B   := build
+ RTL := rtl/SOC.v rtl/chip_select.v rtl/cpu/femtorv32_quark.v rtl/memory/Memory.v \
+-       rtl/uart/perip_uart.v rtl/uart/uart.v rtl/mult/perip_mult.v rtl/mult/mult.v
++       rtl/uart/perip_uart.v rtl/uart/uart.v rtl/mult/perip_mult.v rtl/mult/mult.v \
++       rtl/mandos/uart_8n1.v rtl/mandos/desempaquetador.v
+ # Semana 2: los periféricos nuevos que se pongan en rtl/ se agregan solos
+ RTL += $(filter-out $(RTL),$(wildcard rtl/perip_*.v))
+ 
+@@ -57,7 +58,7 @@ IV_RELAX := $(shell bash -c '$(RUN) $(IVERILOG) -gno-strict-declaration -E -o /d
+ CFLAGS := -march=rv32i -mabi=ilp32 -Os -g -ffreestanding -nostdlib \
+           -ffunction-sections -fdata-sections -Wall
+ 
+-.PHONY: help firmware sim wave rtl syn config config-flash terminal stats clean
++.PHONY: help firmware sim sim_mandos wave rtl syn config config-flash terminal stats clean
+ 
+ help:
+ 	@echo ""
+@@ -107,6 +108,12 @@ sim: firmware.hex
+ 	$(RUN) $(IVERILOG) -g2012 $(IV_RELAX) -DBENCH -o $(B)/tb_soc.vvp -s tb_soc sim/tb_soc.v $(RTL)
+ 	$(RUN) $(VVP) -n $(B)/tb_soc.vvp $(ARGS) | grep -v "readmemh"
+ 
++# Integración SoC + mandos: programa RV32I hecho a mano, no necesita el compilador
++sim_mandos:
++	mkdir -p $(B)
++	$(RUN) $(IVERILOG) -g2012 $(IV_RELAX) -DBENCH -o $(B)/tb_soc_mandos.vvp -s tb_soc_mandos sim/tb_soc_mandos.v $(RTL)
++	$(RUN) $(VVP) -n $(B)/tb_soc_mandos.vvp | grep -v "readmemh"
++
+ wave:
+ 	$(RUN) $(GTKWAVE) $(B)/tb_soc.vcd &
+ 
+diff --git a/projecto/consola/boards/colorlight/top_colorlight.v b/projecto/consola/boards/colorlight/top_colorlight.v
+index 112c585..7092d8b 100644
+--- a/projecto/consola/boards/colorlight/top_colorlight.v
++++ b/projecto/consola/boards/colorlight/top_colorlight.v
+@@ -30,6 +30,7 @@ module top_colorlight (
+       .resetn  (resetn),
+       .LEDS    (led),
+       .RXD     (RXD),
++      .RX_MANDOS(1'b1),        // sin mandos en la Colorlight (línea en reposo)
+       .TXD     (TXD),
+       .BOTONES ({2'b00, ~btn}),
+       .LEDS_EXT(leds_soc)
+diff --git a/projecto/consola/boards/tangnano9k/tangnano9k.cst b/projecto/consola/boards/tangnano9k/tangnano9k.cst
+index 78ece9d..455e227 100644
+--- a/projecto/consola/boards/tangnano9k/tangnano9k.cst
++++ b/projecto/consola/boards/tangnano9k/tangnano9k.cst
+@@ -33,3 +33,8 @@ IO_LOC "uart_rx" 18;
+ IO_PORT "uart_rx" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+ IO_LOC "uart_tx" 17;
+ IO_PORT "uart_tx" IO_TYPE=LVCMOS33 PULL_MODE=UP;
++
++// UART de los mandos: TX (GPIO17) de la ESP32 de la consola, 3,3 V, GND común.
++// Pin 33, el mismo que usa com.cst del G1. Los pines 25 a 29 los usa el G3.
++IO_LOC "uart_mandos" 33;
++IO_PORT "uart_mandos" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+diff --git a/projecto/consola/boards/tangnano9k/top_tangnano9k.v b/projecto/consola/boards/tangnano9k/top_tangnano9k.v
+index 9e25a10..d467083 100644
+--- a/projecto/consola/boards/tangnano9k/top_tangnano9k.v
++++ b/projecto/consola/boards/tangnano9k/top_tangnano9k.v
+@@ -6,6 +6,7 @@
+ //   Botón:   S2 (pin 3), activo en bajo   -> BOTONES[0]
+ //   LEDs:    6 LEDs de la tarjeta, ACTIVOS EN BAJO (0 = encendido)
+ //   UART:    TX pin 17, RX pin 18, por el mismo cable USB (chip BL702)
++//   Mandos:  pin 33 <- GPIO17 (TX2) de la ESP32 de la consola (GND común)
+ //
+ // La tarjeta trabaja al revés que el SoC (0 = presionado / 0 = encendido),
+ // así que aquí se invierten las señales: dentro del SoC siempre 1 = activo.
+@@ -16,7 +17,8 @@ module top_tangnano9k (
+     input        btn_s2,    // pulsador de usuario (presionado = 0)
+     output [5:0] led,       // LEDs de la tarjeta (0 = encendido)
+     input        uart_rx,
+-    output       uart_tx
++    output       uart_tx,
++    input        uart_mandos  // trama de los mandos (G1 / G5)
+ );
+ 
+   wire [7:0] leds_soc;
+@@ -31,6 +33,7 @@ module top_tangnano9k (
+       .LEDS    (led_uart),
+       .RXD     (uart_rx),
+       .TXD     (uart_tx),
++      .RX_MANDOS(uart_mandos),
+       .BOTONES ({3'b000, ~btn_s2}),
+       .LEDS_EXT(leds_soc)
+   );
+diff --git a/projecto/consola/rtl/SOC.v b/projecto/consola/rtl/SOC.v
+index b7edc9c..6c9ea67 100644
+--- a/projecto/consola/rtl/SOC.v
++++ b/projecto/consola/rtl/SOC.v
+@@ -10,6 +10,7 @@
+ //   RAM          Memoria de programa y datos (32 KB), cargada con firmware.hex
+ //   UART         Comunicación serial con el PC
+ //   MULT         Multiplicador por hardware (ejemplo y plantilla de periférico)
++//   MANDOS       Mandos de los dos jugadores por UART (G1, trama del G5)
+ //
+ // MAPA DE MEMORIA (los 16 bits altos de la dirección eligen el bloque):
+ //   0x0040_xxxx  chip0  UART
+@@ -18,17 +19,20 @@
+ //   0x0043_xxxx  chip3  LIBRE
+ //   0x0044_xxxx  chip4  LIBRE
+ //   0x0045_xxxx  chip5  LIBRE
++//   0x0047_xxxx  chip7  Mandos (JOY1_DATA +0x0, JOY2_DATA +0x4, STATUS +0x8)
+ //   cualquier otra      RAM (en la práctica, 0x0000_0000 a 0x0000_7FFF)
+ // =============================================================================
+ module SOC #(
+     parameter CLK_FREQ = 25_000_000,  // Frecuencia del reloj en Hz (la fija cada tarjeta)
+-    parameter BAUD     = 115200       // Velocidad de la UART en baudios
++    parameter BAUD     = 115200,      // Velocidad de la UART en baudios
++    parameter BAUD_MANDOS = 115200    // UART de los mandos (ESP32 de la consola)
+ ) (
+     input        clk,       // Reloj del sistema
+     input        resetn,    // Reset activo en bajo (0 = reiniciar)
+     output [0:0] LEDS,      // LED controlado por el bit 2 del control de la UART
+     input        RXD,       // UART: recepción
+     output       TXD,       // UART: transmisión
++    input        RX_MANDOS, // UART de los mandos: TX de la ESP32 de la consola
+     input  [3:0] BOTONES,   // Pulsadores externos (1 = presionado)
+     output [7:0] LEDS_EXT   // LEDs externos (1 = encendido)
+ );
+@@ -69,7 +73,7 @@ module SOC #(
+   // Activa UNA señal cs según la dirección, y devuelve al procesador el dato
+   // del bloque seleccionado.
+   // ===========================================================================
+-  wire [6:0] cs;
++  wire [7:0] cs;
+   wire cs_uart  = cs[0];  // 0x0040_xxxx
+   wire cs_chip1 = cs[1];  // 0x0041_xxxx  (libre)
+   wire cs_mult  = cs[2];  // 0x0042_xxxx
+@@ -77,10 +81,12 @@ module SOC #(
+   wire cs_chip4 = cs[4];  // 0x0044_xxxx  (libre)
+   wire cs_chip5 = cs[5];  // 0x0045_xxxx  (libre)
+   wire cs_ram   = cs[6];  // cualquier otra dirección
++  wire cs_mandos = cs[7]; // 0x0047_xxxx  mandos (G1)
+ 
+   wire [31:0] uart_dout;
+   wire [31:0] mult_dout;
+   wire [31:0] RAM_rdata;
++  wire [31:0] mandos_dout;
+ 
+   chip_select chip_select (
+       .mem_addr  (mem_addr),
+@@ -91,6 +97,7 @@ module SOC #(
+       .chip4_dout(32'b0),      // 0x0044_xxxx
+       .chip5_dout(32'b0),      // 0x0045_xxxx
+       .chip6_dout(RAM_rdata),  // RAM
++      .chip7_dout(mandos_dout),// 0x0047_xxxx  mandos
+       .cs        (cs),
+       .mem_rdata (mem_rdata)
+   );
+@@ -159,4 +166,29 @@ module SOC #(
+   // ===========================================================================
+   assign LEDS_EXT = 8'b0;
+ 
++  // ===========================================================================
++  // 7. PERIFÉRICO DE MANDOS  (base 0x0047_0000)  — G1
++  //   +0x00  JOY1_DATA  [7:0] X  [15:8] Y  [16] shield  [17] punch  [31:24] secuencia
++  //   +0x04  JOY2_DATA  igual para el jugador 2
++  //   +0x08  STATUS     [0] P1_VALID  [1] P2_VALID  [2] UART_ERROR  [3] CHECKSUM_ERROR
++  //   Solo lectura. X e Y son con signo (int8_t en C).
++  // ===========================================================================
++  peripheral_mandos #(
++      .CLK_HZ(CLK_FREQ),
++      .BAUD  (BAUD_MANDOS)
++  ) mandos (
++      .clk      (clk),
++      .reset    (!resetn),
++      .d_in     (mem_wdata),
++      .cs       (cs_mandos),
++      .addr     (mem_addr),
++      .rd       (rd),
++      .wr       (wr),
++      .d_out    (mandos_dout),
++      .uart_rx  (RX_MANDOS),
++      .joy1_data(),
++      .joy2_data(),
++      .status   ()
++  );
++
+ endmodule
+diff --git a/projecto/consola/rtl/mandos/desempaquetador.v b/projecto/consola/rtl/mandos/desempaquetador.v
+new file mode 100644
+index 0000000..288aa7f
+--- /dev/null
++++ b/projecto/consola/rtl/mandos/desempaquetador.v
+@@ -0,0 +1,136 @@
++// -----------------------------------------------------------------------------
++// DESEMPAQUETADOR (lado receptor, consola) — autor original: Cesar Jaramillo (G1)
++// Versión adaptada a la trama acordada con G5 / G6 / G2 (8 bytes):
++//
++//   byte 0  CABECERA   0xAA
++//   byte 1  jugador    1 o 2
++//   byte 2  secuencia  0..255 (sube en cada trama)
++//   byte 3  X          con signo, -127..127
++//   byte 4  Y          con signo, -127..127
++//   byte 5  shield     bit 0 (botón del joystick)  -> registro bit 16
++//   byte 6  punch      bit 0 (ataque / golpe)      -> registro bit 17
++//   byte 7  checksum   XOR de los bytes 1..6
++//
++// FSM (misma idea del diagrama Package_Manager, ahora por posición):
++//   S_DIR : espera la cabecera 0xAA (cualquier otro byte se ignora).
++//   S_VAL : guarda los bytes 1..6 en latches mientras acumula el XOR.
++//   S_CHK : compara el checksum. Si es correcto y el jugador es 1 o 2,
++//           copia TODA la muestra de ese jugador en un solo flanco.
++//
++// Errores (pulsos de 1 ciclo):
++//   dir_err : trama completa con checksum bien pero jugador distinto de 1 y 2
++//   val_err : checksum incorrecto (la muestra se descarta)
++// Resincronización: si llega rx_frame_err o pasan T_MAX_CICLOS sin bytes con
++// una trama a medias, se descarta y se vuelve a S_DIR.
++//
++// Los registros de salida solo se limpian con el reset global.
++// -----------------------------------------------------------------------------
++module desempaquetador #(
++    parameter [7:0]  CABECERA     = 8'hAA,
++    parameter [7:0]  JUG_P1       = 8'd1,
++    parameter [7:0]  JUG_P2       = 8'd2,
++    parameter integer T_MAX_CICLOS = 27_000          // 1 ms a 27 MHz
++)(
++    input  wire       clk,
++    input  wire       rst_n,
++    // Desde la UART
++    input  wire [7:0] rx_data,
++    input  wire       rx_valid,
++    input  wire       rx_frame_err,
++    // Última muestra válida de cada jugador
++    output reg  [7:0] p1_x,
++    output reg  [7:0] p1_y,
++    output reg        p1_punch,
++    output reg        p1_shield,
++    output reg  [7:0] p1_seq,
++    output reg  [7:0] p2_x,
++    output reg  [7:0] p2_y,
++    output reg        p2_punch,
++    output reg        p2_shield,
++    output reg  [7:0] p2_seq,
++    // Pulsos de 1 ciclo
++    output reg        p1_nuevo,     // llegó una trama válida del jugador 1
++    output reg        p2_nuevo,     // llegó una trama válida del jugador 2
++    output reg        dir_err,
++    output reg        val_err
++);
++    localparam [1:0] S_DIR = 2'd0, S_VAL = 2'd1, S_CHK = 2'd2;
++    localparam integer TW = $clog2(T_MAX_CICLOS + 1);
++
++    reg [1:0]    state;
++    reg [2:0]    idx;                       // byte esperado dentro de S_VAL (1..6)
++    reg [7:0]    jug_l, seq_l, x_l, y_l;    // latches de la trama en curso
++    reg          shield_l, punch_l;
++    reg [7:0]    xor_l;
++    reg [TW-1:0] espera;
++
++    always @(posedge clk or negedge rst_n) begin
++        if (!rst_n) begin
++            state    <= S_DIR;
++            idx      <= 3'd0;
++            jug_l    <= 8'd0;  seq_l <= 8'd0;  x_l <= 8'd0;  y_l <= 8'd0;
++            shield_l <= 1'b0;  punch_l <= 1'b0;
++            xor_l    <= 8'd0;
++            espera   <= 0;
++            p1_x <= 8'd0; p1_y <= 8'd0; p1_punch <= 1'b0; p1_shield <= 1'b0; p1_seq <= 8'd0;
++            p2_x <= 8'd0; p2_y <= 8'd0; p2_punch <= 1'b0; p2_shield <= 1'b0; p2_seq <= 8'd0;
++            p1_nuevo <= 1'b0;  p2_nuevo <= 1'b0;
++            dir_err  <= 1'b0;  val_err  <= 1'b0;
++        end else begin
++            p1_nuevo <= 1'b0;  p2_nuevo <= 1'b0;
++            dir_err  <= 1'b0;  val_err  <= 1'b0;
++
++            if (rx_frame_err) begin                 // byte corrupto: descartar trama
++                state  <= S_DIR;
++                espera <= 0;
++            end else if (rx_valid) begin
++                espera <= 0;
++                case (state)
++                    S_DIR: if (rx_data == CABECERA) begin
++                        idx   <= 3'd1;
++                        xor_l <= 8'd0;
++                        state <= S_VAL;
++                    end
++
++                    S_VAL: begin
++                        xor_l <= xor_l ^ rx_data;
++                        case (idx)
++                            3'd1:    jug_l    <= rx_data;
++                            3'd2:    seq_l    <= rx_data;
++                            3'd3:    x_l      <= rx_data;
++                            3'd4:    y_l      <= rx_data;
++                            3'd5:    shield_l <= rx_data[0];
++                            default: punch_l  <= rx_data[0];
++                        endcase
++                        if (idx == 3'd6) state <= S_CHK;
++                        else             idx   <= idx + 1'b1;
++                    end
++
++                    S_CHK: begin
++                        state <= S_DIR;
++                        if (rx_data != xor_l) begin
++                            val_err <= 1'b1;        // checksum malo: se conserva lo anterior
++                        end else if (jug_l == JUG_P1) begin
++                            p1_x <= x_l; p1_y <= y_l; p1_shield <= shield_l;
++                            p1_punch <= punch_l; p1_seq <= seq_l;
++                            p1_nuevo <= 1'b1;
++                        end else if (jug_l == JUG_P2) begin
++                            p2_x <= x_l; p2_y <= y_l; p2_shield <= shield_l;
++                            p2_punch <= punch_l; p2_seq <= seq_l;
++                            p2_nuevo <= 1'b1;
++                        end else begin
++                            dir_err <= 1'b1;        // jugador que no existe
++                        end
++                    end
++
++                    default: state <= S_DIR;
++                endcase
++            end else if (state != S_DIR) begin      // plazo entre bytes
++                if (espera == T_MAX_CICLOS - 1) begin
++                    state  <= S_DIR;
++                    espera <= 0;
++                end else espera <= espera + 1'b1;
++            end
++        end
++    end
++endmodule
+diff --git a/projecto/consola/rtl/mandos/uart_8n1.v b/projecto/consola/rtl/mandos/uart_8n1.v
+new file mode 100644
+index 0000000..3bb4fb9
+--- /dev/null
++++ b/projecto/consola/rtl/mandos/uart_8n1.v
+@@ -0,0 +1,158 @@
++// -----------------------------------------------------------------------------
++// UART 8N1 (TX + RX).  Tang Nano 9K: CLK_HZ = 27_000_000, BAUD = 115_200
++// Se llama uart_8n1 para no chocar con el módulo "uart" de rtl/uart/uart.v
++//
++// TX: poner tx_data y pulsar tx_start (1 ciclo) cuando tx_busy = 0.
++//     tx_busy sube en el mismo ciclo en que tx_start vale 1.
++// RX: rx_valid es un pulso de 1 ciclo con rx_data listo.
++//     Si el stop bit no es 1 no hay rx_valid: se levanta rx_frame_err y se
++//     espera a que la línea vuelva a 1 antes de buscar otro start (R_ESPERA).
++// -----------------------------------------------------------------------------
++module uart_8n1 #(
++    parameter CLK_HZ = 27_000_000,
++    parameter BAUD   = 115_200
++)(
++    input  wire       clk,
++    input  wire       rst_n,
++    // TX
++    input  wire [7:0] tx_data,
++    input  wire       tx_start,
++    output reg        tx,
++    output wire       tx_busy,
++    // RX
++    input  wire       rx,
++    output reg  [7:0] rx_data,
++    output reg        rx_valid,
++    output reg        rx_frame_err
++);
++    localparam integer CPB  = CLK_HZ / BAUD;      // 234 ciclos por bit
++    localparam integer HALF = CPB / 2;
++    localparam integer CW   = $clog2(CPB) + 1;
++
++    // ------------------------------- TX --------------------------------------
++    localparam T_IDLE = 2'd0, T_START = 2'd1, T_DATA = 2'd2, T_STOP = 2'd3;
++
++    reg [1:0]    t_state;
++    reg [CW-1:0] t_cnt;
++    reg [2:0]    t_idx;
++    reg [7:0]    t_sh;
++
++    assign tx_busy = (t_state != T_IDLE) | tx_start;
++
++    always @(posedge clk or negedge rst_n) begin
++        if (!rst_n) begin
++            t_state <= T_IDLE;
++            t_cnt   <= 0;
++            t_idx   <= 3'd0;
++            t_sh    <= 8'd0;
++            tx      <= 1'b1;
++        end else begin
++            case (t_state)
++                T_IDLE: begin
++                    tx    <= 1'b1;
++                    t_cnt <= 0;
++                    t_idx <= 3'd0;
++                    if (tx_start) begin
++                        t_sh    <= tx_data;
++                        tx      <= 1'b0;                 // start bit
++                        t_state <= T_START;
++                    end
++                end
++                T_START: begin
++                    if (t_cnt == CPB-1) begin
++                        t_cnt   <= 0;
++                        tx      <= t_sh[0];              // bit 0 (LSB primero)
++                        t_state <= T_DATA;
++                    end else t_cnt <= t_cnt + 1'b1;
++                end
++                T_DATA: begin
++                    if (t_cnt == CPB-1) begin
++                        t_cnt <= 0;
++                        if (t_idx == 3'd7) begin
++                            tx      <= 1'b1;             // stop bit
++                            t_state <= T_STOP;
++                        end else begin
++                            t_idx <= t_idx + 1'b1;
++                            t_sh  <= {1'b0, t_sh[7:1]};
++                            tx    <= t_sh[1];
++                        end
++                    end else t_cnt <= t_cnt + 1'b1;
++                end
++                T_STOP: begin
++                    if (t_cnt == CPB-1) begin
++                        t_cnt   <= 0;
++                        t_state <= T_IDLE;
++                    end else t_cnt <= t_cnt + 1'b1;
++                end
++            endcase
++        end
++    end
++
++    // ------------------------------- RX --------------------------------------
++    localparam R_IDLE = 3'd0, R_START = 3'd1, R_DATA = 3'd2, R_STOP = 3'd3,
++               R_ESPERA = 3'd4;
++
++    reg [1:0]    rx_sync;
++    reg [2:0]    r_state;
++    reg [CW-1:0] r_cnt;
++    reg [2:0]    r_idx;
++    reg [7:0]    r_sh;
++
++    always @(posedge clk or negedge rst_n) begin
++        if (!rst_n) rx_sync <= 2'b11;
++        else        rx_sync <= {rx_sync[0], rx};
++    end
++    wire rx_in = rx_sync[1];
++
++    always @(posedge clk or negedge rst_n) begin
++        if (!rst_n) begin
++            r_state      <= R_IDLE;
++            r_cnt        <= 0;
++            r_idx        <= 3'd0;
++            r_sh         <= 8'd0;
++            rx_data      <= 8'd0;
++            rx_valid     <= 1'b0;
++            rx_frame_err <= 1'b0;
++        end else begin
++            rx_valid     <= 1'b0;
++            rx_frame_err <= 1'b0;
++
++            case (r_state)
++                R_IDLE: begin
++                    r_cnt <= 0;
++                    r_idx <= 3'd0;
++                    if (!rx_in) r_state <= R_START;
++                end
++                R_START: begin                           // verificar start a mitad de bit
++                    if (r_cnt == HALF-1) begin
++                        r_cnt <= 0;
++                        r_state <= rx_in ? R_IDLE : R_DATA;
++                    end else r_cnt <= r_cnt + 1'b1;
++                end
++                R_DATA: begin
++                    if (r_cnt == CPB-1) begin
++                        r_cnt <= 0;
++                        r_sh  <= {rx_in, r_sh[7:1]};     // LSB primero
++                        if (r_idx == 3'd7) r_state <= R_STOP;
++                        else               r_idx   <= r_idx + 1'b1;
++                    end else r_cnt <= r_cnt + 1'b1;
++                end
++                R_STOP: begin
++                    if (r_cnt == CPB-1) begin
++                        r_cnt   <= 0;
++                        if (rx_in) begin
++                            rx_data  <= r_sh;
++                            rx_valid <= 1'b1;
++                            r_state  <= R_IDLE;
++                        end else begin
++                            rx_frame_err <= 1'b1;
++                            r_state      <= R_ESPERA;   // línea en 0: no leer basura
++                        end
++                    end else r_cnt <= r_cnt + 1'b1;
++                end
++                R_ESPERA: if (rx_in) r_state <= R_IDLE;
++                default:  r_state <= R_IDLE;
++            endcase
++        end
++    end
++endmodule
+diff --git a/projecto/consola/rtl/perip_mandos.v b/projecto/consola/rtl/perip_mandos.v
+new file mode 100644
+index 0000000..f3a159e
+--- /dev/null
++++ b/projecto/consola/rtl/perip_mandos.v
+@@ -0,0 +1,95 @@
++// -----------------------------------------------------------------------------
++// perip_mandos.v — Periférico de mandos para el SoC de la consola (G1)
++// Usa uart_8n1 + desempaquetador (Cesar Jaramillo) y presenta los registros
++// que espera el juego del G6 (firmware/hardware.h) y que documenta el G5.
++//
++// Región del SoC: 0x0047_xxxx  (chip_select.v, cs[7])
++//   +0x0  JOY1_DATA  [7:0] X  [15:8] Y  [16] shield (botón)  [17] punch (ataque)
++//                    [23:18] 0  [31:24] secuencia
++//   +0x4  JOY2_DATA  igual para el jugador 2
++//   +0x8  STATUS     [0] P1_VALID  [1] P2_VALID  [2] UART_ERROR  [3] CHECKSUM_ERROR
++//   otros 0
++// Las banderas de STATUS quedan en 1 hasta el reset (contrato del G5).
++//
++// Bus igual al de peripheral_mult / peripheral_uart del SoC:
++//   clk, reset (alto), d_in, cs, addr[31:0] (solo addr[3:0]), rd, wr, d_out
++//   d_out se captura en el flanco siguiente a cs & rd (misma latencia que mult).
++// Registros de solo lectura: wr y d_in no se usan.
++// -----------------------------------------------------------------------------
++module peripheral_mandos #(
++    parameter integer CLK_HZ = 27_000_000,
++    parameter integer BAUD   = 115_200
++) (
++    input  wire        clk,
++    input  wire        reset,
++    input  wire [31:0] d_in,
++    input  wire        cs,
++    input  wire [31:0] addr,
++    input  wire        rd,
++    input  wire        wr,
++    output reg  [31:0] d_out,
++    // Línea física: TX de la ESP32 de la consola
++    input  wire        uart_rx,
++    // Para LEDs o depuración (opcional)
++    output wire [31:0] joy1_data,
++    output wire [31:0] joy2_data,
++    output wire [3:0]  status
++);
++    wire rst_n = ~reset;
++
++    // ---------------- UART (solo RX) ----------------
++    wire [7:0] rx_data;
++    wire       rx_valid, rx_frame_err;
++
++    uart_8n1 #(.CLK_HZ(CLK_HZ), .BAUD(BAUD)) u_uart (
++        .clk(clk), .rst_n(rst_n),
++        .tx_data(8'd0), .tx_start(1'b0), .tx(), .tx_busy(),
++        .rx(uart_rx), .rx_data(rx_data), .rx_valid(rx_valid),
++        .rx_frame_err(rx_frame_err));
++
++    // ---------------- Desempaquetador ----------------
++    wire [7:0] p1_x, p1_y, p1_seq, p2_x, p2_y, p2_seq;
++    wire       p1_punch, p1_shield, p2_punch, p2_shield;
++    wire       p1_nuevo, p2_nuevo, dir_err, val_err;
++
++    desempaquetador #(.T_MAX_CICLOS(CLK_HZ / 1000)) des (
++        .clk(clk), .rst_n(rst_n),
++        .rx_data(rx_data), .rx_valid(rx_valid), .rx_frame_err(rx_frame_err),
++        .p1_x(p1_x), .p1_y(p1_y), .p1_punch(p1_punch), .p1_shield(p1_shield), .p1_seq(p1_seq),
++        .p2_x(p2_x), .p2_y(p2_y), .p2_punch(p2_punch), .p2_shield(p2_shield), .p2_seq(p2_seq),
++        .p1_nuevo(p1_nuevo), .p2_nuevo(p2_nuevo),
++        .dir_err(dir_err), .val_err(val_err));
++
++    // ---------------- STATUS ----------------
++    reg p1_valid, p2_valid, uart_error, chk_error;
++    always @(posedge clk) begin
++        if (reset) begin
++            p1_valid <= 1'b0;  p2_valid  <= 1'b0;
++            uart_error <= 1'b0; chk_error <= 1'b0;
++        end else begin
++            if (p1_nuevo)     p1_valid   <= 1'b1;
++            if (p2_nuevo)     p2_valid   <= 1'b1;
++            if (rx_frame_err) uart_error <= 1'b1;
++            if (val_err)      chk_error  <= 1'b1;
++        end
++    end
++
++    assign joy1_data = {p1_seq, 6'd0, p1_punch, p1_shield, p1_y, p1_x};
++    assign joy2_data = {p2_seq, 6'd0, p2_punch, p2_shield, p2_y, p2_x};
++    assign status    = {chk_error, uart_error, p2_valid, p1_valid};
++
++    // ---------------- Lectura desde el procesador ----------------
++    always @(posedge clk) begin
++        if (reset) d_out <= 32'd0;
++        else if (cs && rd) begin
++            case (addr[3:0])
++                4'h0:    d_out <= joy1_data;
++                4'h4:    d_out <= joy2_data;
++                4'h8:    d_out <= {28'd0, status};
++                default: d_out <= 32'd0;
++            endcase
++        end
++    end
++
++    wire _sin_uso = &{1'b0, wr, d_in, addr[31:4]};
++endmodule
+diff --git a/projecto/consola/sim/mandos_prueba.hex b/projecto/consola/sim/mandos_prueba.hex
+new file mode 100644
+index 0000000..58322b4
+--- /dev/null
++++ b/projecto/consola/sim/mandos_prueba.hex
+@@ -0,0 +1,9 @@
++// Programa de prueba (RV32I a mano) para tb_soc_mandos.v
++004700b7  // 0x000: lui  x1, 0x00470      # x1 = 0x0047_0000 (MANDOS_BASE)
++0000a103  // 0x004: lw   x2, 0(x1)         # JOY1_DATA
++0040a183  // 0x008: lw   x3, 4(x1)         # JOY2_DATA
++0080a203  // 0x00c: lw   x4, 8(x1)         # STATUS
++40202023  // 0x010: sw   x2, 0x400(x0)     # RAM[0x400] = JOY1
++40302223  // 0x014: sw   x3, 0x404(x0)     # RAM[0x404] = JOY2
++40402423  // 0x018: sw   x4, 0x408(x0)     # RAM[0x408] = STATUS
++fe9ff06f  // 0x01c: jal  x0, -24           # volver a 0x004
+diff --git a/projecto/consola/sim/tb_soc.v b/projecto/consola/sim/tb_soc.v
+index 7306aa0..3b70187 100644
+--- a/projecto/consola/sim/tb_soc.v
++++ b/projecto/consola/sim/tb_soc.v
+@@ -40,6 +40,7 @@ module tb_soc;
+       .resetn  (resetn),
+       .LEDS    (led),
+       .RXD     (1'b1),       // nadie le envía datos al SoC
++      .RX_MANDOS(1'b1),     // mandos en reposo
+       .TXD     (txd),
+       .BOTONES (botones),
+       .LEDS_EXT(leds_ext)
+diff --git a/projecto/consola/sim/tb_soc_mandos.v b/projecto/consola/sim/tb_soc_mandos.v
+new file mode 100644
+index 0000000..557af46
+--- /dev/null
++++ b/projecto/consola/sim/tb_soc_mandos.v
+@@ -0,0 +1,90 @@
++// =============================================================================
++// tb_soc_mandos.v — Prueba de integración: SoC completo + periférico de mandos
++//
++// El FemtoRV ejecuta sim/mandos_prueba.hex (8 instrucciones hechas a mano, no
++// necesita el compilador RISC-V): lee JOY1_DATA, JOY2_DATA y STATUS en
++// 0x0047_0000 y los copia en la RAM (0x400, 0x404, 0x408). El testbench manda
++// tramas del G5 por RX_MANDOS a 115200 baudios y revisa lo que copió el CPU.
++//
++// Uso:  make sim_mandos      (desde projecto/consola)
++// =============================================================================
++`timescale 1ns / 1ps
++
++module tb_soc_mandos;
++
++  localparam integer CLK_FREQ = 27_000_000;           // Tang Nano 9K
++  localparam integer BIT      = CLK_FREQ / 115_200;   // 234 ciclos por bit
++
++  reg  clk = 0, resetn = 0, rx_mandos = 1;
++  wire txd, led;
++  wire [7:0] leds_ext;
++
++  SOC #(.CLK_FREQ(CLK_FREQ), .BAUD(115200)) uut (
++      .clk      (clk),
++      .resetn   (resetn),
++      .LEDS     (led),
++      .RXD      (1'b1),
++      .TXD      (txd),
++      .RX_MANDOS(rx_mandos),
++      .BOTONES  (4'b0),
++      .LEDS_EXT (leds_ext)
++  );
++
++  always #18.518 clk = ~clk;
++
++  integer fallos = 0, pruebas = 0;
++
++  task check(input [255:0] nombre, input [31:0] obtenido, input [31:0] esperado);
++    begin
++      pruebas = pruebas + 1;
++      if (obtenido !== esperado) begin
++        $display("FALLO %0s: obtenido %h, esperado %h", nombre, obtenido, esperado);
++        fallos = fallos + 1;
++      end else $display("ok    %0s = %h", nombre, obtenido);
++    end
++  endtask
++
++  task byte_tx(input [7:0] b);
++    integer i;
++    begin
++      rx_mandos = 0;                repeat (BIT) @(posedge clk);
++      for (i = 0; i < 8; i = i + 1) begin
++        rx_mandos = b[i];           repeat (BIT) @(posedge clk);
++      end
++      rx_mandos = 1;                repeat (BIT) @(posedge clk);
++    end
++  endtask
++
++  task trama(input [7:0] jug, seq, tx_, ty, sh, pu);
++    begin
++      byte_tx(8'hAA); byte_tx(jug); byte_tx(seq); byte_tx(tx_); byte_tx(ty);
++      byte_tx(sh); byte_tx(pu); byte_tx(jug ^ seq ^ tx_ ^ ty ^ sh ^ pu);
++      repeat (200) @(posedge clk);                    // el CPU vuelve a leer
++    end
++  endtask
++
++  initial begin
++    #1 $readmemh("sim/mandos_prueba.hex", uut.RAM.MEM);
++    #200 resetn = 1;
++    repeat (200) @(posedge clk);
++
++    $display("--- sin tramas: todo en 0 ---");
++    check("RAM[0x400] JOY1", uut.RAM.MEM[256], 32'h0);
++    check("RAM[0x408] STATUS", uut.RAM.MEM[258], 32'h0);
++
++    $display("--- J1: X=-100 Y=+50 shield=1 punch=0 seq=7 ---");
++    trama(8'd1, 8'd7, 8'h9C, 8'h32, 8'd1, 8'd0);
++    check("RAM[0x400] JOY1", uut.RAM.MEM[256], 32'h07_01_32_9C);
++    check("RAM[0x408] STATUS", uut.RAM.MEM[258], 32'h1);
++
++    $display("--- J2: X=+127 Y=-127 shield=0 punch=1 seq=200 ---");
++    trama(8'd2, 8'd200, 8'h7F, 8'h81, 8'd0, 8'd1);
++    check("RAM[0x404] JOY2", uut.RAM.MEM[257], 32'hC8_02_81_7F);
++    check("RAM[0x408] STATUS", uut.RAM.MEM[258], 32'h3);
++
++    if (fallos == 0) $display("\nTODO OK (%0d pruebas)", pruebas);
++    else             $display("\n%0d FALLOS de %0d", fallos, pruebas);
++    $finish;
++  end
++
++endmodule
