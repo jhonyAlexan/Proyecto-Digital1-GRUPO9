@@ -44,7 +44,7 @@ máquina de estados.
 | `leds[5:0]` | Salida | 6 | 10 a 16 | LEDs de la placa, activos en bajo |
 
 
-### Diagrama de flujo / FSM
+### Diagrama de flujo
 
 ```mermaid
 flowchart TD
