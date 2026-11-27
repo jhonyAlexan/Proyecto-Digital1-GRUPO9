@@ -11,9 +11,9 @@
 // Tras un reset siempre se manda cada periférico al menos una vez.
 // -----------------------------------------------------------------------------
 module empaquetador #(
-    parameter [3:0] PER_X     = 4'h1,
-    parameter [3:0] PER_Y     = 4'h2,
-    parameter [3:0] PER_PUNCH = 4'h4,
+    parameter [3:0] PER_X     = 4'42,
+    parameter [3:0] PER_Y     = 4'43,
+    parameter [3:0] PER_PUNCH = 4'44,
     parameter       SOLO_CAMBIOS = 0
 )(
     input  wire       clk,
