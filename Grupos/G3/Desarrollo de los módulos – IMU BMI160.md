@@ -84,9 +84,6 @@ flowchart TD
     ResetLoop --> ReadReq
 ```
 
-
-### Datapath
-
 ### Observaciones
 
 ## spi_master.v
@@ -134,10 +131,54 @@ Una transacción completa dura 16 × 28 = 448 ciclos de reloj, unos 16,6 µs.
 
 Los números de pin se asignan en `top.v` y en el archivo `tangnano9k.cst`.
 
-### Diagrama de flujo / FSM
+### Diagrama de flujo
 ![Diagrama de flujo Módulo SPI](IMU_Probado_FPGA/img/diagrama_flujo_spi.png)
 
 ### Datapath
+
+```mermaid
+flowchart LR
+  start[/"start"/] --> FSM
+  tx[/"tx_data[15:0]"/] --> SH
+  miso[/"miso"/] --> RX
+ 
+  subgraph SPI["spi_master"]
+    direction LR
+    subgraph CTRL["CONTROL"]
+      FSM["FSM<br/>IDLE / LOW / HIGH"]
+      OUT["cs_n, sclk, done"]
+    end
+    subgraph DP["DATAPATH"]
+      DIV["clk_cnt 5b<br/>== 13 : tick"]
+      SH["shift_tx 16b"]
+      BC["bit_cnt 5b<br/>last_bit, rx_window"]
+      MUX["mux 16:1"]
+      RX["rx_data 8b"]
+    end
+    FSM -- "load_tx, dec_bit,<br/>sample_rx, div_clear" --> DP
+    DP -- "tick, last_bit,<br/>rx_window" --> FSM
+    FSM --> OUT
+    SH --> MUX
+    BC --> MUX
+  end
+ 
+  MUX --> mosi[/"mosi"/]
+  OUT --> pins[/"sclk, cs_n, done"/]
+  RX --> rxd[/"rx_data[7:0]"/]
+```
+### FSM
+
+```mermaid
+stateDiagram-v2
+  [*] --> IDLE : rst_n = 0 (T0)
+  IDLE --> IDLE : start = 0 (T1)
+  IDLE --> LOW : start = 1 / load_tx (T2)
+  LOW --> LOW : tick = 0 (T3)
+  LOW --> HIGH : tick = 1 / sclk=1, sample_rx (T4)
+  HIGH --> HIGH : tick = 0 (T3)
+  HIGH --> LOW : tick = 1 y bit_cnt != 0 / sclk=0, dec_bit (T5)
+  HIGH --> IDLE : tick = 1 y bit_cnt = 0 / sclk=0, cs_n=1, done=1 (T6)
+```
 
 ### Observaciones
 
@@ -191,7 +232,7 @@ varias muestras seguidas.
 | `PULSO_ALTO_CLK` | 4 050 000 | 150 ms | Duración de `golpe_out` en alto |
 | `COOLDOWN_CLK` | 2 700 000 | 100 ms | Tiempo en que se ignoran nuevas detecciones |
 
-### Diagrama de flujo / FSM
+### Diagrama de flujo
 
 ```mermaid
 flowchart TD
@@ -303,6 +344,18 @@ flowchart LR
   CTRL -- "clear_timer, inc_timer" --> TMR
   CTRL --> GOUT[/"golpe_out"/]
 ```
+### FSM
+
+```mermaid
+stateDiagram-v2
+  [*] --> ST_LISTO : rst_n = 0 (T0)
+  ST_LISTO --> ST_LISTO : sin muestra o sin exceso (T1)
+  ST_LISTO --> ST_PULSO : sample_valid y over_threshold / golpe_out=1, clear_timer (T2)
+  ST_PULSO --> ST_PULSO : pulse_end = 0 / inc_timer (T3)
+  ST_PULSO --> ST_COOLDOWN : pulse_end = 1 / golpe_out=0, clear_timer (T4)
+  ST_COOLDOWN --> ST_COOLDOWN : cool_end = 0 / inc_timer (T5)
+  ST_COOLDOWN --> ST_LISTO : cool_end = 1 (T6)
+```
 
 ### Observaciones
 
@@ -358,7 +411,7 @@ El módulo no tiene registros de escritura. Mientras no haya una lectura,
 | `golpe_pin` | Salida | 1 | Salida digital directa del golpe detectado |
 | `leds[5:0]` | Salida | 6 | LEDs de la placa, activos en bajo |
 
-### Diagrama de flujo / FSM
+### Diagrama de flujo
 
 ```mermaid
 flowchart TD
